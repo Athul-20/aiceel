@@ -1,0 +1,50 @@
+{
+  "name": "aiccel-saas-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5174",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron": "wait-on tcp:127.0.0.1:5174 && cross-env NODE_ENV=development electron .",
+    "electron:dev": "concurrently -n \"VITE,ELECTRON\" -c \"bgBlue.bold,bgMagenta.bold\" \"npm run dev\" \"npm run electron\"",
+    "electron:build": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-pdf": "^10.4.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^40.6.1",
+    "electron-builder": "^26.8.1",
+    "vite": "^5.4.10",
+    "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "com.aiccel.saas",
+    "productName": "Aiccel SaaS",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "main.cjs"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

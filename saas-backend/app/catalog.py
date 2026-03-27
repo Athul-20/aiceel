@@ -1,0 +1,58 @@
+SERVICES = [
+    {
+        "slug": "runtime-engine",
+        "name": "Runtime Engine",
+        "description": "Lazy-loading runtime with virtual proxy imports and memory-aware startup.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "cognitive-execution",
+        "name": "Cognitive Execution Engine",
+        "description": "Planner-orchestrator split with deterministic schema-controlled execution.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "security-middleware",
+        "name": "Security Middleware",
+        "description": "Neural privacy, adversarial defense, cryptographic vault, sandbox execution.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "multi-agent-orchestration",
+        "name": "Multi-Agent Orchestration",
+        "description": "Semantic routing and DAG-based parallel task execution.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "observability",
+        "name": "Observability",
+        "description": "Trace propagation with inspection and metrics sampling.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "integrations",
+        "name": "Integrations",
+        "description": "REST, SSE streaming, and Model Context Protocol interoperability.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "secure-playground",
+        "name": "Secure Playground",
+        "description": "Unified place to test full stack behavior with your active API key.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+    {
+        "slug": "single-agent-lab",
+        "name": "Single Agent Lab",
+        "description": "Direct single-agent testing lane for fast prompt and model iteration.",
+        "requires_api_key": True,
+        "beta": False,
+    },
+]
