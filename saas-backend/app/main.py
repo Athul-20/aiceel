@@ -33,6 +33,7 @@ from app.routers import (
     providers,
     quotas,
     security,
+    security_center,
     services,
     swarm,
     usage,
@@ -212,6 +213,7 @@ app.include_router(services.router)
 app.include_router(agents.router)
 app.include_router(swarm.router)
 app.include_router(security.router)
+app.include_router(security_center.router)
 app.include_router(platform.router)
 app.include_router(providers.router)
 app.include_router(lab.router)

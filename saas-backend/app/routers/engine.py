@@ -7,6 +7,16 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.errors import provider_error_to_http
+import logging
+
+_logger = logging.getLogger("aiccel.cabtp.engine")
+
+# CABTP: Canary injection + scan for LLM calls
+try:
+    from aiccel.cabtp.canary import inject_canary, scan_response as canary_scan
+    _CANARY_AVAILABLE = True
+except Exception:
+    _CANARY_AVAILABLE = False
 from sqlalchemy.orm import Session
 
 from app.audit import log_audit
@@ -226,17 +236,37 @@ def _run_workflow_logic(
         observability_setup,
     )
 
+    # CABTP: Inject canary into prompt before sending to LLM
+    llm_prompt = security["sanitized_text"]
+    tpt = security.get("cabtp_tpt")
+    if _CANARY_AVAILABLE and tpt is not None:
+        llm_prompt = inject_canary(llm_prompt, tpt.canary_token)
+        _logger.debug("Canary injected into workflow prompt")
+
     try:
         llm_dispatch = simulate_provider_completion(
             provider=dispatch_provider,
             model=dispatch_model,
-            prompt=security["sanitized_text"],
+            prompt=llm_prompt,
             temperature=cognitive_setup.planner_temperature,
             max_tokens=768,
             provider_api_key=provider_secret,
         )
     except RuntimeError as exc:
         raise provider_error_to_http(exc) from exc
+
+    # CABTP: Scan LLM response for canary leakage
+    if _CANARY_AVAILABLE and tpt is not None:
+        is_poisoned, scan_result = canary_scan(llm_dispatch["output"], tpt.canary_token)
+        if is_poisoned:
+            _logger.critical(
+                "CANARY LEAK DETECTED in workflow response | session=%s",
+                tpt.session_id,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Response blocked: session integrity violation detected.",
+            )
 
     response = WorkflowAgentRunResponse(
         service_slug=payload.service_slug,
@@ -507,17 +537,40 @@ def dispatch_llm_completion(
     if not provider_secret:
         raise HTTPException(status_code=400, detail=f"{payload.provider} API key is not configured. Add it in /v1/providers first.")
 
+    # CABTP: For standalone LLM dispatch, run security check + canary
+    _runtime, _cognitive, security_setup, *_rest = load_platform_setup(
+        db, user.id, workspace_id=workspace_id,
+    )
+    sec_result = security_process_text(payload.prompt, security_setup, reversible=False)
+    llm_prompt = sec_result.get("sanitized_text", payload.prompt)
+    tpt = sec_result.get("cabtp_tpt")
+    if _CANARY_AVAILABLE and tpt is not None:
+        llm_prompt = inject_canary(llm_prompt, tpt.canary_token)
+
     try:
         completion = simulate_provider_completion(
             provider=payload.provider,
             model=payload.model,
-            prompt=payload.prompt,
+            prompt=llm_prompt,
             temperature=payload.temperature,
             max_tokens=payload.max_tokens,
             provider_api_key=provider_secret,
         )
     except RuntimeError as exc:
         raise provider_error_to_http(exc) from exc
+
+    # CABTP: Scan response for canary leakage
+    if _CANARY_AVAILABLE and tpt is not None:
+        is_poisoned, _scan = canary_scan(completion["output"], tpt.canary_token)
+        if is_poisoned:
+            _logger.critical(
+                "CANARY LEAK in LLM dispatch | session=%s",
+                tpt.session_id,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Response blocked: session integrity violation detected.",
+            )
 
     result = LLMDispatchResponse.model_validate(completion)
     _meter(

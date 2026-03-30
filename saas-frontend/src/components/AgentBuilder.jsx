@@ -42,6 +42,12 @@ export default function AgentBuilder() {
     "Explain this API error and suggest the next 2 debug steps.",
   ];
 
+  const CREATION_SCENARIOS = [
+    { name: "Legal Analyst", role: "Specialist", prompt: "Review legal documents for PII, compliance risks, and core obligations." },
+    { name: "DevOps SRE", role: "Engineer", prompt: "Debug cloud infrastructure logs and suggest terraform fixes." },
+    { name: "Support Tier-3", role: "Assistance", prompt: "Handle complex customer escalations with empathy and deep product knowledge." },
+  ];
+
   return (
     <div className="feature-page">
       <FeaturePageHeader
@@ -83,6 +89,15 @@ export default function AgentBuilder() {
             <Field label="System Prompt">
               <textarea rows={4} value={agentPrompt} onChange={(e) => setAgentPrompt(e.target.value)} required />
             </Field>
+
+            <div className="agent-prompt-chips" style={{ marginBottom: "1rem" }}>
+              {CREATION_SCENARIOS.map((s) => (
+                <button key={s.name} type="button" className="btn-ghost btn-sm" onClick={() => { setAgentName(s.name); setAgentRole(s.role); setAgentPrompt(s.prompt); }}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+
             <button className="btn-primary" disabled={busy || !hasActiveKey} type="submit">
               {busy ? "Saving..." : "Create Agent"}
             </button>

@@ -46,14 +46,14 @@ class Router:
         retry=retry_if_exception_type((Exception,)),
         reraise=True
     )
-    def route(self, query: str) -> dict[str, Any]:
+    def route(self, query: str, tpt=None) -> dict[str, Any]:
         trace_id = self.logger.trace_start("route_query", {"query": query[:100] + "..." if len(query) > 100 else query})
 
         if not self.agents:
             raise ValueError("No agents available")
 
         if len(self.agents) == 1:
-            return self._execute_single_agent(query, trace_id)
+            return self._execute_single_agent(query, trace_id, tpt=tpt)
 
         agent_descriptions_text = self._build_agent_descriptions()
         routing_prompt = (
@@ -71,7 +71,7 @@ class Router:
         if not selected_agent:
             selected_agent = self._select_default_agent()
 
-        return self._execute_agent(selected_agent, query, trace_id)
+        return self._execute_agent(selected_agent, query, trace_id, tpt=tpt)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -79,14 +79,14 @@ class Router:
         retry=retry_if_exception_type((Exception,)),
         reraise=True
     )
-    async def route_async(self, query: str) -> dict[str, Any]:
+    async def route_async(self, query: str, tpt=None) -> dict[str, Any]:
         trace_id = self.logger.trace_start("route_query_async", {"query": query[:100] + "..." if len(query) > 100 else query})
 
         if not self.agents:
             raise ValueError("No agents available")
 
         if len(self.agents) == 1:
-            return await self._execute_single_agent_async(query, trace_id)
+            return await self._execute_single_agent_async(query, trace_id, tpt=tpt)
 
         agent_descriptions_text = self._build_agent_descriptions()
         routing_prompt = (
@@ -104,15 +104,15 @@ class Router:
         if not selected_agent:
             selected_agent = self._select_default_agent()
 
-        return await self._execute_agent_async(selected_agent, query, trace_id)
+        return await self._execute_agent_async(selected_agent, query, trace_id, tpt=tpt)
 
-    def _execute_single_agent(self, query: str, trace_id: int) -> dict[str, Any]:
+    def _execute_single_agent(self, query: str, trace_id: int, tpt=None) -> dict[str, Any]:
         agent_name = next(iter(self.agents.keys()))
-        return self._execute_agent(agent_name, query, trace_id)
+        return self._execute_agent(agent_name, query, trace_id, tpt=tpt)
 
-    async def _execute_single_agent_async(self, query: str, trace_id: int) -> dict[str, Any]:
+    async def _execute_single_agent_async(self, query: str, trace_id: int, tpt=None) -> dict[str, Any]:
         agent_name = next(iter(self.agents.keys()))
-        return await self._execute_agent_async(agent_name, query, trace_id)
+        return await self._execute_agent_async(agent_name, query, trace_id, tpt=tpt)
 
     def _get_routing_decision(self, prompt: str, trace_id: int) -> Optional[str]:
         providers = [self.provider, *self.fallback_providers]
@@ -136,12 +136,32 @@ class Router:
                 self.logger.trace_error(trace_id, e, f"Async routing with provider {type(provider).__name__} failed")
         return None
 
-    def _execute_agent(self, agent_name: str, query: str, trace_id: int) -> dict[str, Any]:
+    def _execute_agent(self, agent_name: str, query: str, trace_id: int, tpt=None) -> dict[str, Any]:
         agent = self.agents[agent_name]["agent"]
         self.logger.info(f"Routing query to agent: {agent_name}")
         try:
             result = agent.run(query)
             result["agent_used"] = agent_name
+
+            # CABTP: Canary scan on agent response
+            if tpt is not None:
+                from ..cabtp.canary import scan_response
+                response_text = result.get("response", "")
+                is_poisoned, scan_result = scan_response(response_text, tpt.canary_token)
+                result["cabtp_status"] = "SESSION_POISONED" if is_poisoned else "CLEAN"
+                result["canary_scan"] = {
+                    "is_poisoned": is_poisoned,
+                    "scan_time_ms": scan_result.scan_time_ms,
+                }
+                if is_poisoned:
+                    self.logger.info(f"CABTP: Canary leak detected in agent '{agent_name}'")
+                    result["response"] = (
+                        "[SESSION TERMINATED] Security violation detected: "
+                        "agent leaked session integrity data."
+                    )
+            else:
+                result["cabtp_status"] = "DISABLED"
+
             self.history.append({
                 "query": query,
                 "agent": agent_name,
@@ -154,12 +174,32 @@ class Router:
             self.logger.trace_error(trace_id, e, f"Agent {agent_name} execution failed")
             raise
 
-    async def _execute_agent_async(self, agent_name: str, query: str, trace_id: int) -> dict[str, Any]:
+    async def _execute_agent_async(self, agent_name: str, query: str, trace_id: int, tpt=None) -> dict[str, Any]:
         agent = self.agents[agent_name]["agent"]
         self.logger.info(f"Routing query to agent: {agent_name}")
         try:
             result = await agent.run_async(query)
             result["agent_used"] = agent_name
+
+            # CABTP: Canary scan on agent response
+            if tpt is not None:
+                from ..cabtp.canary import scan_response
+                response_text = result.get("response", "")
+                is_poisoned, scan_result = scan_response(response_text, tpt.canary_token)
+                result["cabtp_status"] = "SESSION_POISONED" if is_poisoned else "CLEAN"
+                result["canary_scan"] = {
+                    "is_poisoned": is_poisoned,
+                    "scan_time_ms": scan_result.scan_time_ms,
+                }
+                if is_poisoned:
+                    self.logger.info(f"CABTP: Canary leak detected in agent '{agent_name}'")
+                    result["response"] = (
+                        "[SESSION TERMINATED] Security violation detected: "
+                        "agent leaked session integrity data."
+                    )
+            else:
+                result["cabtp_status"] = "DISABLED"
+
             self.history.append({
                 "query": query,
                 "agent": agent_name,

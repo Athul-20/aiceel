@@ -43,11 +43,11 @@ def _is_enabled() -> bool:
 
 
 def _score_threshold() -> float:
-    raw = os.getenv("AICCEL_JAILBREAK_SCORE_THRESHOLD", "0.70").strip()
+    raw = os.getenv("AICCEL_JAILBREAK_SCORE_THRESHOLD", "0.60").strip()
     try:
         return max(0.0, min(1.0, float(raw)))
     except ValueError:
-        return 0.70
+        return 0.60
 
 
 # ── Singleton model state (thread-safe lazy load) ────────────────────
@@ -122,9 +122,20 @@ def classify_jailbreak_text(text: str) -> dict[str, Any]:
             item = raw or {}
         label = str(item.get("label", "")).lower()
         score = float(item.get("score", 0.0))
+        
         safe_hints = ("safe", "benign", "normal", "label_0", "non-jailbreak", "not_jailbreak")
+        unsafe_hints = ("jailbreak", "prompt_injection", "injection", "unsafe", "malicious", "attack", "label_1")
+        
         is_safe_label = any(h in label for h in safe_hints)
-        detected = (not is_safe_label) and (score >= threshold)
+        is_unsafe_label = any(h in label for h in unsafe_hints)
+
+        if is_safe_label:
+            detected = False
+        elif is_unsafe_label:
+            detected = score >= threshold
+        else:
+            detected = score >= threshold and label == "label_1"
+
         return {
             "enabled": True,
             "available": True,

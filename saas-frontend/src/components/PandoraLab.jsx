@@ -165,7 +165,7 @@ export default function PandoraLab() {
           </div>
 
           <form className="form-grid" onSubmit={runTransform}>
-            <Field label="Instruction">
+            <Field label="Transformation Instruction">
               <textarea
                 rows={3}
                 value={instruction}
@@ -175,14 +175,13 @@ export default function PandoraLab() {
               />
             </Field>
 
-            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            <div className="agent-prompt-chips" style={{ marginBottom: "1rem" }}>
               {EXAMPLE_INSTRUCTIONS.map((ex) => (
                 <button
                   type="button"
                   key={ex.label}
                   className="btn-ghost btn-sm"
                   onClick={() => setInstruction(ex.instruction)}
-                  style={{ fontSize: "0.75rem" }}
                 >
                   {ex.label}
                 </button>
@@ -190,7 +189,7 @@ export default function PandoraLab() {
             </div>
 
             <button className="btn-primary btn-full" disabled={busy || !hasActiveKey || !csvData.trim()} type="submit">
-              {busy ? "Transforming..." : "Run Pandora Transform"}
+              {busy ? "Transforming..." : "Execute Pandora Transform"}
             </button>
           </form>
 

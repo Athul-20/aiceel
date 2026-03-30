@@ -134,6 +134,23 @@ export const api = {
       apiKey,
     }),
 
+  getSecurityCenterStatus: (apiKey) =>
+    request("/v1/security/center/status", {
+      apiKey,
+    }),
+
+  getHardwareStats: (apiKey) =>
+    request("/v1/security/center/hardware/stats", {
+      apiKey,
+    }),
+
+  runSecurityProbe: (apiKey, payload) =>
+    request("/v1/security/center/probe", {
+      method: "POST",
+      apiKey,
+      body: payload,
+    }),
+
   getPlatformSetup: (apiKey) =>
     request("/v1/platform/setup", {
       apiKey,

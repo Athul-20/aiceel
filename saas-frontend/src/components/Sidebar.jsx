@@ -19,7 +19,10 @@ const ICON_MAP = {
   usage: Icons.IconUsage,
   webhook: Icons.IconWebhook,
   workspace: Icons.IconWorkspace,
-  docs: Icons.IconDocs,
+  api_docs: Icons.IconDocs,
+  securitycenter: Icons.IconSecurityCenter,
+  hardware: Icons.IconHardware,
+  canary: Icons.IconCanary,
 };
 
 export default function Sidebar() {

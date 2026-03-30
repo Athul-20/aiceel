@@ -76,14 +76,14 @@ class Collaborator:
         retry=retry_if_exception_type((Exception,)),
         reraise=True
     )
-    def collaborate(self, query: str, max_agents: int = 5, agent_ids: Optional[list[str]] = None) -> dict[str, Any]:
+    def collaborate(self, query: str, max_agents: int = 5, agent_ids: Optional[list[str]] = None, tpt=None) -> dict[str, Any]:
         trace_id = self.logger.trace_start("collaborate", {"query": query[:100], "max_agents": max_agents})
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 result = loop.run_until_complete(
-                    self.collaborate_async(query, max_agents, agent_ids)
+                    self.collaborate_async(query, max_agents, agent_ids, tpt=tpt)
                 )
                 self.logger.trace_end(trace_id, {
                     "response": result["response"][:100],
@@ -102,7 +102,7 @@ class Collaborator:
         retry=retry_if_exception_type((Exception,)),
         reraise=True
     )
-    async def collaborate_async(self, query: str, max_agents: int = 5, agent_ids: Optional[list[str]] = None) -> dict[str, Any]:
+    async def collaborate_async(self, query: str, max_agents: int = 5, agent_ids: Optional[list[str]] = None, tpt=None) -> dict[str, Any]:
         trace_id = self.logger.trace_start("collaborate_async", {"query": query[:100], "max_agents": max_agents})
 
         if not self.agents:
@@ -122,8 +122,30 @@ class Collaborator:
             # LLM Splitting
             sub_queries = await self._split_query_async(query, max_agents, trace_id)
 
-        # Execution
-        results = await self._execute_sub_queries(sub_queries, trace_id)
+        # Execution (pass TPT for scope inheritance)
+        results = await self._execute_sub_queries(sub_queries, trace_id, tpt=tpt)
+
+        # CABTP: Canary scan before synthesis
+        if tpt is not None:
+            from ..cabtp.canary import scan_response
+            for r in results:
+                response_text = r.get("response", "")
+                is_poisoned, scan_result = scan_response(response_text, tpt.canary_token)
+                r["canary_scan"] = {
+                    "is_poisoned": is_poisoned,
+                    "scan_time_ms": scan_result.scan_time_ms,
+                }
+                if is_poisoned:
+                    self.logger.info(
+                        f"CABTP: Canary leak detected in agent '{r.get('agent')}' — aborting synthesis"
+                    )
+                    return {
+                        "response": "[SESSION TERMINATED] Security violation detected: an agent leaked session integrity data.",
+                        "agent_results": results,
+                        "agents_used": [r.get("agent")],
+                        "sub_queries": sub_queries,
+                        "cabtp_status": "SESSION_POISONED",
+                    }
 
         # Synthesis
         final_response = await self._synthesize_results(query, results, trace_id)
@@ -134,7 +156,8 @@ class Collaborator:
             "response": final_response,
             "agent_results": results,
             "agents_used": agents_used,
-            "sub_queries": sub_queries
+            "sub_queries": sub_queries,
+            "cabtp_status": "CLEAN" if tpt else "DISABLED",
         }
 
         self.history.append({
@@ -171,16 +194,36 @@ class Collaborator:
         # Default fallback
         return [{"sub_query": query, "agent": self._select_default_agent()}]
 
-    async def _execute_sub_queries(self, sub_queries: list[dict[str, str]], trace_id: int) -> list[dict[str, Any]]:
+    async def _execute_sub_queries(self, sub_queries: list[dict[str, str]], trace_id: int, tpt=None) -> list[dict[str, Any]]:
         tasks = []
+
+        # CABTP: Derive child tokens per agent (scope inheritance)
+        child_tpts = {}
+        if tpt is not None:
+            from ..cabtp.tpt import derive_child_token, verify_token
+            for sq in sub_queries:
+                agent_name = sq["agent"]
+                if agent_name not in child_tpts:
+                    try:
+                        # Each agent gets a child TPT with the parent's scope
+                        # In production, scope would be reduced per agent role
+                        child_tpts[agent_name] = derive_child_token(
+                            parent=tpt,
+                            reduced_scope=tpt.permission_scope,
+                            secret_key=self._cabtp_secret_key if hasattr(self, '_cabtp_secret_key') else '',
+                        )
+                    except ValueError:
+                        child_tpts[agent_name] = None
+
         for sq in sub_queries:
             agent_name = sq["agent"]
             query = sq["sub_query"]
-            tasks.append(self._run_agent_task(agent_name, query, trace_id))
+            agent_tpt = child_tpts.get(agent_name)
+            tasks.append(self._run_agent_task(agent_name, query, trace_id, tpt=agent_tpt))
 
         return await asyncio.gather(*tasks)
 
-    async def _run_agent_task(self, agent_name: str, query: str, trace_id: int) -> dict[str, Any]:
+    async def _run_agent_task(self, agent_name: str, query: str, trace_id: int, tpt=None) -> dict[str, Any]:
         agent = self.agents[agent_name]["agent"]
         async with self.semaphore:
             try:
@@ -194,13 +237,20 @@ class Collaborator:
                     cache_key = f"{result['tool_used']}:{json.dumps(result['tool_output'], sort_keys=True)}"
                     self.cache_callback(cache_key, result["tool_output"])
 
-                return {
+                agent_result = {
                     "agent": agent_name,
                     "response": result.get("response", ""),
                     "tool_used": result.get("tool_used"),
                     "tool_output": result.get("tool_output"),
-                    "queries": [query]
+                    "queries": [query],
                 }
+
+                # CABTP: Attach child TPT metadata to result
+                if tpt is not None:
+                    agent_result["cabtp_scope_depth"] = tpt.scope_depth
+                    agent_result["cabtp_scope"] = tpt.permission_scope
+
+                return agent_result
             except Exception as e:
                 self.logger.trace_error(trace_id, e, f"Agent {agent_name} failed")
                 return {"agent": agent_name, "response": f"Error: {e}", "queries": [query]}

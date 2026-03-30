@@ -17,6 +17,8 @@ import Playground from "./components/Playground";
 import ApiDocs from "./components/ApiDocs";
 import Settings from "./components/Settings";
 import BiomedMasking from "./components/BiomedMasking";
+import HardwareCage from "./components/HardwareCage";
+import CanaryMonitor from "./components/CanaryMonitor";
 
 const MAX_NOTIFICATIONS = 5;
 const NOTIFICATION_TTL_MS = 4500;
@@ -103,6 +105,8 @@ function AppContent() {
       case "vault": return <PandoraVault />;
       case "pandora": return <PandoraLab />;
       case "sandbox": return <SandboxLab />;
+      case "hardware_cage": return <HardwareCage />;
+      case "canary_monitor": return <CanaryMonitor />;
       case "agents": return <AgentBuilder />;
       case "swarm": return <SwarmLab />;
       case "playground": return <Playground />;

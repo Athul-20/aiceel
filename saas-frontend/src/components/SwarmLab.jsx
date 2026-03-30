@@ -9,6 +9,12 @@ export default function SwarmLab() {
     busy, hasActiveKey, setActiveView
   } = useApp();
 
+  const SWARM_PRESETS = [
+    { label: "GTM Plan", text: "Draft a Go-To-Market plan for the AICCEL enterprise launch." },
+    { label: "Security Audit", text: "Analyze the current agentic architecture for PII and context injection vulnerabilities." },
+    { label: "Feature Roadmap", text: "Design a 12-month roadmap focusing on multi-cloud agentic orchestration." },
+  ];
+
   return (
     <div className="feature-page">
       <FeaturePageHeader
@@ -35,6 +41,14 @@ export default function SwarmLab() {
             <Field label="Objective">
               <textarea rows={4} value={swarmObjective} onChange={(e) => setSwarmObjective(e.target.value)} required placeholder="What should the swarm accomplish?" />
             </Field>
+
+            <div className="agent-prompt-chips" style={{ marginBottom: "1rem" }}>
+              {SWARM_PRESETS.map((s) => (
+                <button key={s.label} type="button" className="btn-ghost btn-sm" onClick={() => setSwarmObjective(s.text)}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
             
             <Field label="Lead Agent (Orchestrator)">
               <select value={swarmLeadId} onChange={(e) => setSwarmLeadId(e.target.value)}>

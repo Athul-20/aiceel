@@ -58,11 +58,11 @@ def _model_name() -> str:
 
 
 def _score_threshold() -> float:
-    raw = os.getenv("AICCEL_JAILBREAK_SCORE_THRESHOLD", "0.70").strip()
+    raw = os.getenv("AICCEL_JAILBREAK_SCORE_THRESHOLD", "0.60").strip()
     try:
         value = float(raw)
     except ValueError:
-        return 0.70
+        return 0.60
     return max(0.0, min(1.0, value))
 
 
@@ -129,6 +129,20 @@ def _load_classifier() -> Any | None:
         return _classifier
 
 
+# ── Risk Band Thresholds (CABTP) ────────────────────────────────────
+_RISK_BAND_LOW_MAX = 0.40
+_RISK_BAND_MID_MAX = 0.75
+
+
+def _score_to_risk_band(score: float) -> str:
+    """Map a jailbreak confidence score to a CABTP risk band."""
+    if score <= _RISK_BAND_LOW_MAX:
+        return "LOW"
+    if score <= _RISK_BAND_MID_MAX:
+        return "MID"
+    return "HIGH"
+
+
 # ── Public API ──────────────────────────────────────────────────────
 def classify_jailbreak_text(text: str) -> dict[str, Any]:
     """
@@ -140,6 +154,7 @@ def classify_jailbreak_text(text: str) -> dict[str, Any]:
         detected  – True when the prompt looks like a jailbreak attempt
         label     – raw model label
         score     – confidence score 0-1
+        risk_band – CABTP risk zone: LOW (0-0.40), MID (0.41-0.75), HIGH (>0.75)
         error     – error string or None
     """
     classifier = _load_classifier()
@@ -150,6 +165,7 @@ def classify_jailbreak_text(text: str) -> dict[str, Any]:
             "detected": False,
             "label": "",
             "score": 0.0,
+            "risk_band": "LOW",
             "error": _classifier_error or "unavailable",
         }
 
@@ -162,6 +178,7 @@ def classify_jailbreak_text(text: str) -> dict[str, Any]:
             "detected": False,
             "label": "",
             "score": 0.0,
+            "risk_band": "LOW",
             "error": f"inference_failed:{exc.__class__.__name__}",
         }
 
@@ -182,8 +199,64 @@ def classify_jailbreak_text(text: str) -> dict[str, Any]:
         "detected": detected,
         "label": label,
         "score": score,
+        "risk_band": _score_to_risk_band(score),
         "error": None,
     }
+
+
+def classify_and_mint(
+    text: str,
+    user_context: dict[str, Any],
+    secret_key: str,
+    permission_scope: list[str] | None = None,
+    ttl_seconds: float = 300.0,
+) -> dict[str, Any]:
+    """
+    CABTP-enhanced classification: classify the prompt AND mint a TPT.
+
+    Behavior by risk band:
+        LOW  (0.00-0.40): Prompt is safe. Mint a full-scope TPT.
+        MID  (0.41-0.75): Prompt is suspicious. Mint a reduced-scope TPT.
+        HIGH (>0.75):     Prompt is blocked. No TPT issued.
+
+    Args:
+        text:             The raw user prompt.
+        user_context:     Dict with user metadata (user_id, role, etc.).
+        secret_key:       Server-side HMAC secret.
+        permission_scope:  Permissions to grant. Defaults to ["read_data", "mask_pii"].
+        ttl_seconds:      Token lifetime in seconds.
+
+    Returns:
+        The standard classify_jailbreak_text() dict, plus:
+            tpt   – A TrustPropagationToken (or None if HIGH).
+    """
+    result = classify_jailbreak_text(text)
+    risk_band = result.get("risk_band", "LOW")
+
+    if risk_band == "HIGH" or result.get("detected"):
+        result["tpt"] = None
+        return result
+
+    # Lazy import to avoid circular deps and keep startup fast
+    from .cabtp.tpt import RiskBand, mint_token
+
+    band = RiskBand.MID if risk_band == "MID" else RiskBand.LOW
+
+    # MID band gets reduced scope: strip write permissions
+    if band == RiskBand.MID and permission_scope:
+        permission_scope = [p for p in permission_scope if "write" not in p]
+
+    tpt = mint_token(
+        request_text=text,
+        user_context=user_context,
+        secret_key=secret_key,
+        permission_scope=permission_scope,
+        risk_band=band,
+        ttl_seconds=ttl_seconds,
+    )
+
+    result["tpt"] = tpt
+    return result
 
 
 def check_prompt(prompt: str) -> bool:

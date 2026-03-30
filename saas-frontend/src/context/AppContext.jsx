@@ -396,7 +396,13 @@ export function AppProvider({ children }) {
       };
       const result = await api.runSwarm(activeApiKey, payload);
       setSwarmResult(result);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (err.status === 403) {
+        setSwarmResult({ final_output: "SECURITY BLOCK: Swarm input was rejected by policy. See Sentinel Shield logs for details." });
+      } else {
+        setError(err.message);
+      }
+    }
     finally { setBusy(false); }
   }
 
@@ -475,7 +481,13 @@ export function AppProvider({ children }) {
         agentId: Number(singleAgentTestAgentId),
       });
       setSingleAgentTestResult(result);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (err.status === 403) {
+        setSingleAgentTestResult({ output: "SECURITY BLOCK: This prompt violates the platform's trust policy.", security_report: { blocked: true, risk_score: 1.0 } });
+      } else {
+        setError(err.message);
+      }
+    }
     finally { setBusy(false); }
   }
 

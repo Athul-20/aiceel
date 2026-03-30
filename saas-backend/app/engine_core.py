@@ -18,6 +18,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.jailbreak_classifier import classify_jailbreak_text
 from app.models import PlatformConfig
+
+# CABTP: Import TPT minting for active-by-default security
+try:
+    from aiccel.jailbreak import classify_and_mint as _cabtp_classify_and_mint
+    _CABTP_AVAILABLE = True
+except Exception:
+    _CABTP_AVAILABLE = False
 from app.schemas import (
     CognitiveSetup,
     IntegrationSetup,
@@ -40,7 +47,8 @@ INJECTION_MARKERS: List[str] = [
     "dan mode", "developer mode", "<script", "drop table", "prompt injection",
     "override safety", "[system]", "trusted admin", "internal configuration",
     "do anything now", "print your full system prompt", "bypass all security filters",
-    "system command", "disregard"
+    "system command", "disregard", "exploit vulnerabilities", "ignore safety", 
+    "bypass policies", "ignore instructions", "ignore all safety"
 ]
 
 
@@ -240,7 +248,29 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
     heuristic_risk = (0.8 * len(detected_markers)) + (0.16 if deduped_entities else 0.0)
     model_risk = float(model_detection["score"]) if model_detection["detected"] else 0.0
     risk_score = min(1.0, max(heuristic_risk, model_risk))
+
+    # --- Hardware Governor Integration ---
+    try:
+        from aiccel.hardware_governor import OSGovernor
+        OSGovernor().apply_risk_profile(risk_score)
+    except Exception as e:
+        import logging
+        logging.getLogger("aiccel.core").warning(f"OS Governor unavailable: {e}")
+    # -------------------------------------
     blocked = setup.fail_closed and (bool(detected_markers) or risk_score >= setup.injection_threshold)
+
+    # CABTP: Mint a Trust Propagation Token for this request
+    tpt = None
+    if _CABTP_AVAILABLE and not blocked:
+        settings = get_settings()
+        cabtp_secret = getattr(settings, 'SECRET_KEY', 'aiccel-cabtp-default-secret')
+        cabtp_result = _cabtp_classify_and_mint(
+            text=text,
+            user_context={"source": "security_process_text"},
+            secret_key=cabtp_secret,
+            permission_scope=["read_data", "mask_pii"],
+        )
+        tpt = cabtp_result.get("tpt")
 
     return {
         "blocked": blocked,
@@ -254,6 +284,8 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
         "tokenized_text": tokenized_text,
         "token_map": token_map,
         "model_detection": model_detection,
+        "cabtp_tpt": tpt,
+        "cabtp_status": "ACTIVE" if tpt else ("BLOCKED" if blocked else "UNAVAILABLE"),
         "generated_at": utc_now(),
     }
 

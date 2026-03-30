@@ -664,6 +664,14 @@ export default function PiiMasking() {
                   placeholder="Paste text with sensitive information..."
                   required
                 />
+
+                <div className="agent-prompt-chips" style={{ marginTop: "0.5rem" }}>
+                  {PRESETS.map((p) => (
+                    <button key={p.id} type="button" className="btn-ghost btn-sm" onClick={() => applyPreset(p.id)}>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
               </label>
 
               <div className="pii-controls-grid">

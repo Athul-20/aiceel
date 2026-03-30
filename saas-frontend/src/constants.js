@@ -23,6 +23,14 @@ export const NAV_GROUPS = [
     ],
   },
   {
+    title: "Hardened Security",
+    items: [
+      ["hardware_cage", "hardware", "Hardware Cage"],
+      ["canary_monitor", "canary", "CABTP Monitor"],
+    ],
+  },
+
+  {
     title: "Agents",
     items: [
       ["agents", "agent", "Agent Builder"],
@@ -48,7 +56,9 @@ export const VIEW_META = {
   console: { title: "Console", desc: "Interactive workspace to run any AICCEL feature, inspect responses, and generate production API snippets." },
   pii_masking: { title: "PII Masking", desc: "Detect and mask sensitive entities — emails, phones, names, cards — with reversible tokenization." },
   biomed_masking: { title: "BioMed Masking", desc: "Specialized zero-shot entity recognition for biomedical data. Identify diseases, drugs, and lab results." },
-  jailbreak: { title: "Sentinel Shield", desc: "Detect and block prompt injection attacks, adversarial markers, and system prompt extraction attempts." },
+  jailbreak: { title: "Sentinel Shield", desc: "Live status of all CABTP modules with transparency dashboards and injection testing." },
+  hardware_cage: { title: "Hardware Cage", desc: "Live physical resource isolation. Monitor CPU affinity and priority shifts in real-time." },
+  canary_monitor: { title: "CABTP Monitor", desc: "Advanced inter-agent session poisoning detection. Zero-knowledge cryptographic pulse." },
   vault: { title: "Pandora Vault", desc: "AES-256-GCM encryption with PBKDF2 key derivation. Encrypt and decrypt secrets securely." },
   pandora: { title: "Pandora Data Lab", desc: "Transform any CSV/Excel dataset with natural language — powered by AI with sandboxed code execution." },
   sandbox: { title: "Sandbox Lab", desc: "Execute Python and JavaScript code in a constrained, sandboxed runtime environment." },
@@ -210,5 +220,7 @@ export const DASHBOARD_FEATURES = [
   { id: "agents", icon: "agent", title: "Agent Builder", desc: "Create AI agents with custom roles, models, system prompts, and tool bindings.", tag: "Agents", color: "green" },
   { id: "swarm", icon: "swarm", title: "Swarm Orchestration", desc: "Multi-agent collaboration with lead/collaborator routing and DAG delegation.", tag: "Agents", color: "orange" },
   { id: "playground", icon: "playground", title: "Playground", desc: "Run prompts through AICCEL services with live security checks and full config snapshots.", tag: "Execution", color: "pink" },
+  { id: "hardware_cage", icon: "hardware", title: "Hardware Cage", desc: "Physical resource gating based on AI risk scores. Monitor OS-level CPU affinity.", tag: "Physical", color: "red" },
+  { id: "canary_monitor", icon: "canary", title: "CABTP Monitor", desc: "Monitor zero-knowledge swarm security and session poisoning detections.", tag: "Crypto", color: "indigo" },
   { id: "console", icon: "console", title: "Console", desc: "Interactive workspace to run every AICCEL capability with production-ready API snippets.", tag: "Developer", color: "cyan" },
 ];

@@ -263,6 +263,19 @@ export default function BiomedMasking() {
                   required
                 />
               </Field>
+
+              <div className="agent-prompt-chips" style={{ marginBottom: "1rem" }}>
+                {[
+                  { name: "Discharge Summary", text: "Patient John Doe, 45, discharged after treatment for Acute Myocardial Infarction. Prescribed Atorvastatin 40mg and Aspirin 81mg." },
+                  { name: "Lab Report", text: "Blood work for Jane Smith shows HbA1c of 7.5% and fasting glucose of 140 mg/dL. Diagnosis: Type 2 Diabetes." },
+                  { name: "Prescription", text: "Rx: Amoxicillin 500mg TID for 10 days. Take with food. Patient has allergy to Penicillin." },
+                ].map((s) => (
+                  <button key={s.name} type="button" className="btn-ghost btn-sm" onClick={() => setText(s.text)}>
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+
               <button
                 className={`btn-primary btn-full${busy ? " btn-loading" : ""}`}
                 disabled={busy || !hasActiveKey}
@@ -363,7 +376,7 @@ export default function BiomedMasking() {
                     </div>
                     <div className="pdf-file-name">{file.name}</div>
                     <div className="pdf-file-size">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {(file ? file.size / 1024 / 1024 : 0).toFixed(2)} MB
                     </div>
                   </div>
                 ) : (

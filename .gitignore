@@ -179,3 +179,28 @@ saas-backend/*.err
 saas-backend/*.out
 saas-backend/*.log
 saas-frontend/*.log
+*.log.txt
+
+# Validation, Testing, and Benchmark Code (EXCLUDED FROM PUSH)
+saas-backend/tests/
+saas-backend/verify_*.py
+saas-backend/benchmark_*.py
+saas-backend/demo_*.py
+saas-backend/inject_*.py
+verify_zk_canary.py
+tests/
+
+# Agent-Generated Artifacts and Documentation
+walkthrough.md
+implementation_plan.md
+task.md
+analysis_results.md
+cabtp_security_survey.md
+research_notes.md
+experiment_results.md
+AICCEL_*.md
+*.md.txt
+*.md
+!README.md
+!saas-frontend/README.md
+!saas-backend/README.md

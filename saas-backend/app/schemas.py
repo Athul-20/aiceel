@@ -103,7 +103,7 @@ class SecuritySetup(BaseModel):
     regex_scan: bool = True
     semantic_entity_recognition: bool = True
     reversible_tokenization: bool = True
-    injection_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+    injection_threshold: float = Field(default=0.60, ge=0.0, le=1.0)
     fail_closed: bool = True
     encryption_mode: str = Field(default="aes-256-gcm")
     pbkdf2_iterations: int = Field(default=600000, ge=100000, le=2000000)

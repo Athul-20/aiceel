@@ -4,6 +4,16 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.errors import provider_error_to_http
+import logging
+
+_pg_logger = logging.getLogger("aiccel.cabtp.playground")
+
+# CABTP: Canary injection + scan for playground LLM calls
+try:
+    from aiccel.cabtp.canary import inject_canary, scan_response as canary_scan
+    _CANARY_AVAILABLE = True
+except Exception:
+    _CANARY_AVAILABLE = False
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
@@ -201,17 +211,39 @@ def run_playground(
                 user_id=user.id,
             )
         model_name = selected_agent.model if selected_agent else "gpt-4o-mini"
+
+        # CABTP: Inject canary into prompt before LLM call
+        canary_prompt = prompt_text
+        tpt = security_result.get("cabtp_tpt")
+        if _CANARY_AVAILABLE and tpt is not None:
+            canary_prompt = inject_canary(canary_prompt, tpt.canary_token)
+            _pg_logger.debug("Canary injected into playground prompt")
+
         try:
             completion = simulate_provider_completion(
                 provider=provider,
                 model=model_name,
-                prompt=prompt_text,
+                prompt=canary_prompt,
                 temperature=cognitive_setup.planner_temperature,
                 max_tokens=768,
                 provider_api_key=provider_secret,
             )
         except RuntimeError as exc:
             raise provider_error_to_http(exc) from exc
+
+        # CABTP: Scan LLM response for canary leakage
+        if _CANARY_AVAILABLE and tpt is not None:
+            is_poisoned, _scan = canary_scan(completion["output"], tpt.canary_token)
+            if is_poisoned:
+                _pg_logger.critical(
+                    "CANARY LEAK in playground | session=%s",
+                    tpt.session_id,
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Response blocked: session integrity violation detected.",
+                )
+
         output_text = completion["output"]
         token_count = int(completion.get("token_usage", {}).get("total_tokens", 0))
         runtime_ms = 60
