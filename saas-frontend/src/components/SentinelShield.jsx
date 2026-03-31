@@ -65,10 +65,51 @@ export default function SentinelShield() {
           title="Sentinel Shield"
           desc="Unified Trust Hub: Live CABTP metrics, masking transparency, and prompt injection testing."
         />
-        <div className="key-alert">
-          <span>Activate an API key to view the Sentinel Shield dashboard.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+        
+        <div className="pii-hero-shell" style={{ marginBottom: "2rem" }}>
+          <div className="pii-hero-copy">
+            <span className="pii-kicker">Engine Readiness</span>
+            <h3>Shield is active and protecting host resources.</h3>
+            <p>
+              Connect an LLM provider to unlock real-time prompt injection testing, 
+              adversarial trace monitoring, and PII/BioMed entity auditing.
+            </p>
+            <button className="btn-primary" onClick={() => setActiveView("keys")} style={{ marginTop: "1rem" }}>
+              Activate Security Hub
+            </button>
+          </div>
+          <div className="pii-hero-stats">
+            <StatCard label="Host Gating" value="ACTIVE" tone="safe" />
+            <StatCard label="ZK-Canary" value="READY" tone="safe" />
+            <StatCard label="Trust Hub" value="LOCKED" tone="warn" />
+          </div>
         </div>
+
+        <div className="feature-split" style={{ opacity: 0.4, pointerEvents: "none", filter: "grayscale(0.5) blur(1px)" }}>
+          <section className="card">
+            <div className="card-head"><h3>Universal Security Probe</h3></div>
+            <div className="form-grid">
+               <div className="field"><div className="field-label">System Input</div><div className="field-input" style={{ height: "100px", background: "var(--grey-50)" }}></div></div>
+               <button className="btn-primary btn-full">Execute Universal Probe</button>
+            </div>
+          </section>
+          <section className="card">
+            <div className="card-head"><h3>Shield Mitigation Trace</h3></div>
+            <div style={{ textAlign: "center", padding: "4rem 0" }}>
+               <Icons.IconShield size={48} style={{ opacity: 0.1, marginBottom: "1rem" }} />
+               <p className="muted">Activate a key to see the trace.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  function StatCard({ label, value, tone = "neutral" }) {
+    return (
+      <div className={`pii-stat-card ${tone}`}>
+        <span className="pii-stat-value">{value}</span>
+        <span className="pii-stat-label">{label}</span>
       </div>
     );
   }

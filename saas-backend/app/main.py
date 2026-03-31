@@ -157,7 +157,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Redacted-Count", "X-Entity-Summary"],
+    expose_headers=["X-Request-ID", "X-Redacted-Count", "X-Entity-Summary", "X-Total-Count"],
 )
 
 

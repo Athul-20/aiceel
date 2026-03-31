@@ -1,8 +1,13 @@
+import { useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { Field } from "./Shared";
 
 export default function AuthScreen() {
-  const { mode, setMode, email, setEmail, password, setPassword, busy, error, notice, authSubmit } = useApp();
+  const { mode, setMode, email, setEmail, password, setPassword, busy, error, setError, notice, authSubmit } = useApp();
+
+  useEffect(() => {
+    setError("");
+  }, [mode, setError]);
 
   return (
     <div className="auth-shell">

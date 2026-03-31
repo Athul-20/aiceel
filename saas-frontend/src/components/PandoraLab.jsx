@@ -25,7 +25,7 @@ const EXAMPLE_INSTRUCTIONS = [
 ];
 
 export default function PandoraLab() {
-  const { activeApiKey, busy: globalBusy, hasActiveKey, setActiveView, setError, setNotice, copyText } = useApp();
+  const { activeApiKey, busy: globalBusy, hasActiveKey, setActiveView, setError, setNotice, copyText, providerStatuses } = useApp();
 
   const [csvData, setCsvData] = useState(SAMPLE_DATA);
   const [instruction, setInstruction] = useState("Show only employees in Engineering department and sort by salary descending");
@@ -105,12 +105,18 @@ export default function PandoraLab() {
         desc="Transform any dataset using natural language. The AI only sees your schema, never your actual data."
       />
 
-      {!hasActiveKey && (
+      {!hasActiveKey ? (
         <div className="key-alert">
-          <span>Activate an API key and configure a provider to use Pandora.</span>
+          <span>Activate an API key to use Pandora Data Lab.</span>
           <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
         </div>
-      )}
+      ) : providerStatuses.length === 0 ? (
+        <div className="key-alert warn" style={{ background: "rgba(245, 158, 11, 0.1)", borderColor: "var(--orange)" }}>
+          <Icons.IconAlert size={20} style={{ color: "var(--orange)" }} />
+          <span>LLM Provider Required: Please configure one or more API providers to enable natural language transformation.</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("providers")}>Configure Providers</button>
+        </div>
+      ) : null}
 
       <div className="feature-split">
         {/* Input Panel */}

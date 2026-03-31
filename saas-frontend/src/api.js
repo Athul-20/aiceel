@@ -11,37 +11,51 @@ async function request(path, { method = "GET", token, apiKey, workspaceId, idemp
   if (workspaceId) headers["X-Workspace-ID"] = String(workspaceId);
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
-  });
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    const requestError = new Error(error?.error?.message || error.detail || "Request failed");
-    requestError.status = response.status;
-    requestError.payload = error;
-    throw requestError;
-  }
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
+      signal: controller.signal,
+    });
+    clearTimeout(id);
 
-  const isBlob = response.headers.get("content-type")?.includes("application/pdf");
-  const data = response.status === 204 ? null : (isBlob ? await response.blob() : await response.json());
-  
-  if (isBlob) {
-    let entities = [];
-    try { entities = JSON.parse(response.headers.get("X-Entity-Summary") || "[]"); } catch {}
-    return {
-      blob: data,
-      redactedCount: parseInt(response.headers.get("X-Redacted-Count") || "0", 10),
-      entities,
-    };
-  }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const requestError = new Error(error?.error?.message || error.detail || "Request failed");
+      requestError.status = response.status;
+      requestError.payload = error;
+      throw requestError;
+    }
 
-  if (returnMeta) {
-    return { data, status: response.status };
+    const isBlob = response.headers.get("content-type")?.includes("application/pdf");
+    const data = response.status === 204 ? null : (isBlob ? await response.blob() : await response.json());
+    
+    if (isBlob) {
+      let entities = [];
+      try { entities = JSON.parse(response.headers.get("X-Entity-Summary") || "[]"); } catch {}
+      return {
+        blob: data,
+        redactedCount: parseInt(response.headers.get("X-Redacted-Count") || "0", 10),
+        entities,
+      };
+    }
+
+    if (returnMeta) {
+      return { data, status: response.status };
+    }
+    return data;
+
+  } catch (err) {
+    clearTimeout(id);
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out. The engine or provider is taking too long to respond.");
+    }
+    throw err;
   }
-  return data;
 }
 
 export const api = {

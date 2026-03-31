@@ -1,5 +1,7 @@
+import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { DASHBOARD_FEATURES } from "../constants";
+import { api } from "../api";
 import * as Icons from "./Icons";
 
 const ICON_MAP = {
@@ -17,9 +19,27 @@ const ICON_MAP = {
 };
 
 export default function Dashboard() {
-  const { setActiveView, metrics, providerStatuses, agents, hasActiveKey, activeWorkspace, services, usageEvents } = useApp();
+  const { setActiveView, metrics, providerStatuses, agents, hasActiveKey, activeWorkspace, activeApiKey, usageEvents } = useApp();
+  const [hwStats, setHwStats] = useState(null);
+  
   const configuredProviders = providerStatuses.filter((i) => i.is_configured).length;
   const recentEvents = (usageEvents || []).slice(0, 5);
+
+  const fetchHw = async () => {
+    if (!activeApiKey) return;
+    try {
+      const res = await api.getHardwareStats(activeApiKey);
+      setHwStats(res);
+    } catch (err) {
+      console.error("Dashboard HW fetch failed", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchHw();
+    const timer = setInterval(fetchHw, 5000);
+    return () => clearInterval(timer);
+  }, [activeApiKey]);
 
   return (
     <div className="dashboard-grid">
@@ -35,6 +55,41 @@ export default function Dashboard() {
           <button className="btn-ghost" type="button" onClick={() => setActiveView("playground")}>Open Playground</button>
           <button className="btn-ghost" type="button" onClick={() => setActiveView("console")}>Console</button>
         </div>
+      </section>
+
+      {/* SYSTEM HEALTH MONITOR */}
+      <section className="dashboard-bridge-stats">
+         <div className="bridge-card stats-main">
+            <div className="bridge-head">
+               <Icons.IconShield size={18} />
+               <h3>System Health & Hardware Gating</h3>
+            </div>
+            <div className="bridge-body">
+               <div className="hw-mini-grid">
+                  {Array.from({ length: hwStats?.logical_cores || 8 }).map((_, i) => {
+                    const isActive = i < (hwStats?.current_affinity_count || 1);
+                    const risk = hwStats?.risk_level || "low";
+                    return (
+                      <div key={i} className={`hw-dot ${isActive ? `active ${risk}` : ""}`} title={`Core ${i}: ${isActive ? 'Locked' : 'Available'}`} />
+                    );
+                  })}
+               </div>
+               <div className="hw-meta">
+                  <div className="hw-meta-item">
+                     <span>Cores Isolated</span>
+                     <strong>{hwStats?.current_affinity_count || 1} / {hwStats?.logical_cores || 8}</strong>
+                  </div>
+                  <div className="hw-meta-item">
+                     <span>Priority Class</span>
+                     <strong className={hwStats?.risk_level === 'critical' ? 'v-danger' : ''}>{hwStats?.priority_class || 'Normal'}</strong>
+                  </div>
+                  <div className="hw-meta-item">
+                     <span>Engine Status</span>
+                     <strong style={{ color: "var(--green)" }}>Protected</strong>
+                  </div>
+               </div>
+            </div>
+         </div>
       </section>
 
       <div className="stats-row stagger-children">

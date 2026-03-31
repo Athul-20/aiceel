@@ -3683,3 +3683,135 @@ select {
   color: var(--grey-900);
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
+
+/* ── Dashboard Bridge & Telemetry ────────────────────── */
+.dashboard-bridge-stats {
+  margin-bottom: var(--sp-6);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-4);
+  animation: fade-in 0.6s ease;
+}
+
+.bridge-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.bridge-head {
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--grey-50);
+}
+
+.bridge-head h3 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--grey-600);
+}
+
+.bridge-body {
+  padding: var(--sp-6);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-10);
+  flex-wrap: wrap;
+}
+
+.hw-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: #0a0a0a;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid #222;
+}
+
+.hw-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: #1a1a1a;
+  transition: all 0.3s ease;
+}
+
+.hw-dot.active.low {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green-soft);
+}
+
+.hw-dot.active.elevated {
+  background: var(--orange);
+  box-shadow: 0 0 10px var(--orange-soft);
+}
+
+.hw-dot.active.critical {
+  background: var(--red);
+  box-shadow: 0 0 15px var(--red-soft);
+}
+
+.hw-meta {
+  display: flex;
+  gap: var(--sp-8);
+  flex: 1;
+}
+
+.hw-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hw-meta-item span {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--grey-500);
+}
+
+.hw-meta-item strong {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--grey-950);
+}
+
+.v-danger {
+  color: var(--red) !important;
+}
+
+/* ── Sentinel Shield Enhanced Onboarding ─────────────── */
+.pii-hero-shell {
+  display: flex;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.pii-hero-copy {
+  padding: var(--sp-10);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.pii-hero-stats {
+  padding: var(--sp-10);
+  background: var(--grey-50);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: 280px;
+}
