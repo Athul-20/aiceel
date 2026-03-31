@@ -7,6 +7,7 @@ import {
 } from "../constants";
 
 const AppContext = createContext(null);
+export const THEME_STORAGE_KEY = "aiccel_theme";
 
 function readStorage(key, fallback = "") {
   try {
@@ -48,6 +49,10 @@ export function useApp() {
 
 export function AppProvider({ children }) {
   const ACTIVE_VIEW_STORAGE = "aiccel_active_view";
+  const [theme, setTheme] = useState(() => {
+    const storedTheme = readStorage(THEME_STORAGE_KEY, "light");
+    return storedTheme === "dark" ? "dark" : "light";
+  });
   const [mode, setMode] = useState("login");
   const [activeView, setActiveView] = useState(() => readStorage(ACTIVE_VIEW_STORAGE, "dashboard"));
   const [email, setEmail] = useState("");
@@ -609,6 +614,9 @@ export function AppProvider({ children }) {
   }
 
   function logout() { clearSession(); setActiveView("dashboard"); }
+  function toggleTheme() {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  }
   function copyText(text) {
     navigator.clipboard.writeText(text).then(() => {
       setNotice("");
@@ -636,11 +644,20 @@ export function AppProvider({ children }) {
     if (activeView) writeStorage(ACTIVE_VIEW_STORAGE, activeView);
   }, [activeView]);
   useEffect(() => {
+    writeStorage(THEME_STORAGE_KEY, theme);
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    }
+  }, [theme]);
+  useEffect(() => {
     if (isLoggedIn && activeApiKey) loadOpsContext(activeApiKey, activeView);
   }, [isLoggedIn, activeApiKey, activeView]);
   useEffect(() => { if (user?.default_workspace_id) setActiveWorkspaceId(user.default_workspace_id); }, [user]);
 
   const value = {
+    // Theme
+    theme, setTheme, toggleTheme,
     // Auth
     mode, setMode, email, setEmail, password, setPassword, token, user, isLoggedIn,
     authSubmit, logout, applySession, clearSession,

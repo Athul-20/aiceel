@@ -1,7 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { THEME_STORAGE_KEY } from "./context/AppContext";
 import "./styles.css";
+
+try {
+  const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  const initialTheme = storedTheme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = initialTheme;
+  document.documentElement.style.colorScheme = initialTheme;
+} catch {}
 
 class RootErrorBoundary extends React.Component {
   constructor(props) {

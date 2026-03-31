@@ -17,6 +17,7 @@ import Playground from "./components/Playground";
 import ApiDocs from "./components/ApiDocs";
 import Settings from "./components/Settings";
 import BiomedMasking from "./components/BiomedMasking";
+import * as Icons from "./components/Icons";
 
 const MAX_NOTIFICATIONS = 5;
 const NOTIFICATION_TTL_MS = 4500;
@@ -87,7 +88,7 @@ function NotificationTray({ notice, error }) {
 }
 
 function AppContent() {
-  const { isLoggedIn, activeView, activeViewMeta, error, notice, activeWorkspace } = useApp();
+  const { isLoggedIn, activeView, activeViewMeta, error, notice, activeWorkspace, theme, toggleTheme } = useApp();
 
   if (!isLoggedIn) {
     return <AuthScreen />;
@@ -129,6 +130,18 @@ function AppContent() {
           <div className="top-bar-right">
             <span className="status-pill">{activeWorkspace ? activeWorkspace.name : "Personal Sandbox"}</span>
             <span className="status-pill live">Engine Ready</span>
+            <button
+              className="btn-ghost btn-sm theme-toggle"
+              onClick={toggleTheme}
+              type="button"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              aria-pressed={theme === "dark"}
+            >
+              <span className="theme-toggle-icon" aria-hidden="true">
+                {theme === "dark" ? <Icons.IconSun /> : <Icons.IconMoon />}
+              </span>
+              <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            </button>
           </div>
         </header>
 
