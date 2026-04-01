@@ -12,7 +12,7 @@ export default function AgentBuilder() {
     agentRunResult, selectedRunAgent, createAgent, deleteAgent, runAgentFromStudio,
     singleAgentTestAgentId, setSingleAgentTestAgentId, singleAgentTestService, setSingleAgentTestService,
     singleAgentTestPrompt, setSingleAgentTestPrompt, singleAgentTestResult, runSingleAgentTest,
-    services, busy, setActiveView, setPlaygroundAgentId, hasActiveKey, apiKeyReadiness
+    services, busy, setActiveView, setPlaygroundAgentId, hasFeatureAccess, sessionStatus
   } = useApp();
 
   const selectedSingleAgent = agents.find((item) => String(item.id) === String(singleAgentTestAgentId)) || null;
@@ -51,10 +51,9 @@ export default function AgentBuilder() {
         desc="Create reusable AI agents, test one agent instantly, and run full workflow orchestration."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>{apiKeyReadiness.alertMessage}</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -83,7 +82,7 @@ export default function AgentBuilder() {
             <Field label="System Prompt">
               <textarea rows={4} value={agentPrompt} onChange={(e) => setAgentPrompt(e.target.value)} required />
             </Field>
-            <button className="btn-primary" disabled={busy || !hasActiveKey} type="submit">
+            <button className="btn-primary" disabled={busy || !hasFeatureAccess} type="submit">
               {busy ? "Saving..." : "Create Agent"}
             </button>
           </form>
@@ -118,7 +117,7 @@ export default function AgentBuilder() {
                 </button>
               ))}
             </div>
-            <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasActiveKey} type="submit">
+            <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasFeatureAccess} type="submit">
               {busy ? "Testing..." : "Run Single Agent Test"}
             </button>
           </form>
@@ -176,7 +175,7 @@ export default function AgentBuilder() {
           <Field label="User Prompt">
             <textarea rows={4} value={agentRunPrompt} onChange={(e) => setAgentRunPrompt(e.target.value)} required />
           </Field>
-          <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasActiveKey} type="submit">
+          <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasFeatureAccess} type="submit">
             {busy ? "Running..." : "Run Workflow"}
           </button>
         </form>

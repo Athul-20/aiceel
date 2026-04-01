@@ -25,7 +25,7 @@ const EXAMPLE_INSTRUCTIONS = [
 ];
 
 export default function PandoraLab() {
-  const { activeApiKey, busy: globalBusy, hasActiveKey, setActiveView, setError, setNotice, copyText, apiKeyReadiness } = useApp();
+  const { runPandoraTransform, hasFeatureAccess, setError, setNotice, copyText, sessionStatus } = useApp();
 
   const [csvData, setCsvData] = useState(SAMPLE_DATA);
   const [instruction, setInstruction] = useState("Show only employees in Engineering department and sort by salary descending");
@@ -53,23 +53,12 @@ export default function PandoraLab() {
 
   async function runTransform(e) {
     e.preventDefault();
-    if (!hasActiveKey || !activeApiKey) { setError(apiKeyReadiness.alertMessage); return; }
+    if (!hasFeatureAccess) { setError(sessionStatus.alertMessage); return; }
     setBusy(true); setResult(null); setError("");
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-      const response = await fetch(`${API_BASE}/v1/engine/pandora/transform`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": activeApiKey },
-        body: JSON.stringify({ csv_data: csvData, instruction }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err?.error?.message || err.detail || "Transform failed");
-      }
-
-      const data = await response.json();
+      const data = await runPandoraTransform({ csv_data: csvData, instruction });
+      if (!data) return;
       setResult(data);
       setHistory(prev => [{ instruction, timestamp: new Date().toLocaleTimeString(), rows: data.row_count, cols: data.column_count }, ...prev.slice(0, 9)]);
     } catch (err) {
@@ -105,10 +94,9 @@ export default function PandoraLab() {
         desc="Transform any dataset using natural language. The AI only sees your schema, never your actual data."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>{apiKeyReadiness.alertMessage} Configure a provider as well to use Pandora.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
+          <span>{sessionStatus.alertMessage} Configure a provider as well to use Pandora.</span>
         </div>
       )}
 
@@ -189,7 +177,7 @@ export default function PandoraLab() {
               ))}
             </div>
 
-            <button className="btn-primary btn-full" disabled={busy || !hasActiveKey || !csvData.trim()} type="submit">
+            <button className="btn-primary btn-full" disabled={busy || !hasFeatureAccess || !csvData.trim()} type="submit">
               {busy ? "Transforming..." : "Run Pandora Transform"}
             </button>
           </form>

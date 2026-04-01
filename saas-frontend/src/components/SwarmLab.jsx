@@ -6,7 +6,7 @@ export default function SwarmLab() {
   const {
     agents, swarmObjective, setSwarmObjective, swarmLeadId, setSwarmLeadId,
     swarmCollaborators, toggleCollaborator, swarmResult, runSwarm,
-    busy, hasActiveKey, setActiveView, apiKeyReadiness
+    busy, hasFeatureAccess, setActiveView, sessionStatus
   } = useApp();
 
   return (
@@ -18,10 +18,9 @@ export default function SwarmLab() {
         desc="Execute multi-agent collaboration with lead/collaborator routing and DAG-like task delegation."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>{apiKeyReadiness.alertMessage}</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -57,7 +56,7 @@ export default function SwarmLab() {
               {agents.length === 0 && <p className="muted">No agents available. <button type="button" className="btn-ghost btn-sm" onClick={() => setActiveView("agents")}>Create Agents</button></p>}
             </div>
 
-            <button className="btn-primary btn-full" disabled={busy || !hasActiveKey || agents.length === 0} type="submit">
+            <button className="btn-primary btn-full" disabled={busy || !hasFeatureAccess || agents.length === 0} type="submit">
               {busy ? "Running Swarm..." : <><Icons.IconSwarm /> Launch Swarm Execution</>}
             </button>
           </form>

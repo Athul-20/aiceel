@@ -4,7 +4,7 @@ import { Field, FeaturePageHeader, ResultPanel, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function PandoraVault() {
-  const { vaultEncrypt, vaultDecrypt, busy, hasActiveKey, setActiveView, copyText, apiKeyReadiness } = useApp();
+  const { vaultEncrypt, vaultDecrypt, busy, hasFeatureAccess, copyText, sessionStatus } = useApp();
   const [mode, setMode] = useState("encrypt");
   const [plaintext, setPlaintext] = useState("my-secret-api-key-12345");
   const [passphrase, setPassphrase] = useState("StrongPassphrase123!");
@@ -40,10 +40,9 @@ export default function PandoraVault() {
         desc="Enterprise-grade encryption with AES-256-GCM and PBKDF2 key derivation. Encrypt and decrypt any secret."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>{apiKeyReadiness.alertMessage}</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -66,7 +65,7 @@ export default function PandoraVault() {
               <Field label="Passphrase">
                 <input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} placeholder="Strong passphrase for key derivation" required />
               </Field>
-              <button className="btn-primary btn-full" disabled={busy || !hasActiveKey} type="submit">
+              <button className="btn-primary btn-full" disabled={busy || !hasFeatureAccess} type="submit">
                 {busy ? "Encrypting..." : "Encrypt"}
               </button>
             </form>
@@ -112,7 +111,7 @@ export default function PandoraVault() {
               <Field label="Passphrase">
                 <input type="password" value={decryptPassphrase} onChange={(e) => setDecryptPassphrase(e.target.value)} placeholder="Same passphrase used for encryption" required />
               </Field>
-              <button className="btn-primary btn-full" disabled={busy || !hasActiveKey} type="submit">
+              <button className="btn-primary btn-full" disabled={busy || !hasFeatureAccess} type="submit">
                 {busy ? "Decrypting..." : "Decrypt"}
               </button>
             </form>

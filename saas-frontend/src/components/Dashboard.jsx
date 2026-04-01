@@ -17,7 +17,7 @@ const ICON_MAP = {
 };
 
 export default function Dashboard() {
-  const { setActiveView, metrics, providerStatuses, agents, hasActiveKey, activeWorkspace, services, usageEvents, apiKeyReadiness } = useApp();
+  const { setActiveView, metrics, providerStatuses, agents, hasFeatureAccess, activeWorkspace, usageEvents, sessionStatus } = useApp();
   const configuredProviders = providerStatuses.filter((i) => i.is_configured).length;
   const recentEvents = (usageEvents || []).slice(0, 5);
 
@@ -82,7 +82,7 @@ export default function Dashboard() {
           </div>
           <div className="status-list">
             {[
-              { label: "API Key", value: apiKeyReadiness.statusLabel, good: hasActiveKey },
+              { label: "Session", value: sessionStatus.statusLabel, good: hasFeatureAccess },
               { label: "Providers", value: configuredProviders ? `${configuredProviders} configured` : "Required", good: configuredProviders > 0 },
               { label: "Agents", value: agents.length ? `${agents.length} ready` : "Create one", good: agents.length > 0 },
               { label: "Workspace", value: activeWorkspace ? activeWorkspace.name : "No workspace", good: Boolean(activeWorkspace) },

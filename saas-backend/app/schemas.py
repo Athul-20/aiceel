@@ -449,6 +449,7 @@ class UsageEventOut(BaseModel):
     tokens: int
     runtime_ms: int
     status: str
+    api_key_id: int | None = None
     request_id: str | None = None
     created_at: datetime
 

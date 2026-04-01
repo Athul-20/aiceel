@@ -6,7 +6,7 @@ export default function Playground() {
   const {
     services, agents, playgroundService, setPlaygroundService,
     playgroundAgentId, setPlaygroundAgentId, playgroundPrompt, setPlaygroundPrompt,
-    playgroundResult, runPlayground, busy, hasActiveKey, setActiveView, apiKeyReadiness
+    playgroundResult, runPlayground, busy, hasFeatureAccess, sessionStatus
   } = useApp();
 
   return (
@@ -18,10 +18,9 @@ export default function Playground() {
         desc="Run prompts through any AICCEL service with live policy checks, security screening, and full configuration snapshots."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>{apiKeyReadiness.alertMessage}</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -47,7 +46,7 @@ export default function Playground() {
             <Field label="Prompt">
               <textarea rows={6} value={playgroundPrompt} onChange={(e) => setPlaygroundPrompt(e.target.value)} required placeholder="Enter a prompt to run through the security and execution engine..." />
             </Field>
-            <button className="btn-primary btn-full" disabled={busy || !hasActiveKey} type="submit">
+            <button className="btn-primary btn-full" disabled={busy || !hasFeatureAccess} type="submit">
               {busy ? "Executing..." : "Run Request"}
             </button>
           </form>

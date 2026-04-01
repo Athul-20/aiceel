@@ -3,7 +3,7 @@ import { Field, FeaturePageHeader, ResultPanel } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function SandboxLab() {
-  const { labLanguage, setLabLanguage, labCode, setLabCode, labInput, setLabInput, labResult, runLab, busy, hasActiveKey, setActiveView, apiKeyReadiness } = useApp();
+  const { labLanguage, setLabLanguage, labCode, setLabCode, labInput, setLabInput, labResult, runLab, busy, hasFeatureAccess, sessionStatus } = useApp();
 
   return (
     <div className="feature-page">
@@ -14,10 +14,9 @@ export default function SandboxLab() {
         desc="Execute Python and JavaScript code in a memory-limited, time-constrained sandbox runtime."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>{apiKeyReadiness.alertMessage}</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -40,7 +39,7 @@ export default function SandboxLab() {
             <Field label="Input (stdin)">
               <textarea rows={3} value={labInput} onChange={(e) => setLabInput(e.target.value)} placeholder="Optional input data..." style={{ fontFamily: "var(--mono)", fontSize: "0.85rem" }} />
             </Field>
-            <button className="btn-primary btn-full" disabled={busy || !hasActiveKey} type="submit">
+            <button className="btn-primary btn-full" disabled={busy || !hasFeatureAccess} type="submit">
               {busy ? "Executing..." : "Run in Sandbox"}
             </button>
           </form>
