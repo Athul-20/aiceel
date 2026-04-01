@@ -4,7 +4,7 @@ import { Field, FeaturePageHeader, ResultPanel, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function PandoraVault() {
-  const { vaultEncrypt, vaultDecrypt, busy, hasActiveKey, setActiveView, copyText } = useApp();
+  const { vaultEncrypt, vaultDecrypt, busy, hasActiveKey, setActiveView, copyText, apiKeyReadiness } = useApp();
   const [mode, setMode] = useState("encrypt");
   const [plaintext, setPlaintext] = useState("my-secret-api-key-12345");
   const [passphrase, setPassphrase] = useState("StrongPassphrase123!");
@@ -42,8 +42,8 @@ export default function PandoraVault() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to use Pandora Vault.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

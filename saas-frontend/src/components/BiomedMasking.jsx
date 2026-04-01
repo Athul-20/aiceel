@@ -55,7 +55,7 @@ function groupPdfEntities(entities) {
 }
 
 export default function BiomedMasking() {
-  const { runBiomedMasking, runBiomedPdfMasking, busy, hasActiveKey, setActiveView } = useApp();
+  const { runBiomedMasking, runBiomedPdfMasking, busy, hasActiveKey, setActiveView, apiKeyReadiness } = useApp();
 
   // Mode
   const [activeTab, setActiveTab] = useState("text");
@@ -177,10 +177,8 @@ export default function BiomedMasking() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to use BioMedical Masking.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>
-            Get API Key
-          </button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

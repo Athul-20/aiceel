@@ -6,7 +6,7 @@ export default function SwarmLab() {
   const {
     agents, swarmObjective, setSwarmObjective, swarmLeadId, setSwarmLeadId,
     swarmCollaborators, toggleCollaborator, swarmResult, runSwarm,
-    busy, hasActiveKey, setActiveView
+    busy, hasActiveKey, setActiveView, apiKeyReadiness
   } = useApp();
 
   return (
@@ -20,8 +20,8 @@ export default function SwarmLab() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to run a swarm.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

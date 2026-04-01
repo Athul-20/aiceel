@@ -25,6 +25,9 @@ const ICON_MAP = {
 
 export default function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [openSections, setOpenSections] = useState(() =>
+    Object.fromEntries(NAV_GROUPS.map((group) => [group.title, true]))
+  );
   const { activeView, setActiveView, user, logout } = useApp();
 
   useEffect(() => {
@@ -53,6 +56,13 @@ export default function Sidebar() {
     logout();
   }
 
+  function toggleSection(title) {
+    setOpenSections((previous) => ({
+      ...previous,
+      [title]: !previous[title],
+    }));
+  }
+
   return (
     <>
       <aside className="sidebar">
@@ -63,24 +73,38 @@ export default function Sidebar() {
 
         <nav className="stagger-children">
           {NAV_GROUPS.map((group) => (
-            <div className="nav-section" key={group.title}>
-              <p className="nav-section-title">{group.title}</p>
-              {group.items.map(([id, iconKey, label]) => {
-                const IconComp = ICON_MAP[iconKey];
-                return (
-                  <button
-                    className={`nav-item ${activeView === id ? "active" : ""}`}
-                    key={id}
-                    onClick={() => setActiveView(id)}
-                    type="button"
-                  >
-                    <span className="nav-icon">
-                      {IconComp ? <IconComp /> : null}
-                    </span>
-                    {label}
-                  </button>
-                );
-              })}
+            <div className={`nav-section ${openSections[group.title] ? "open" : "collapsed"}`} key={group.title}>
+              <button
+                className="nav-section-trigger"
+                type="button"
+                onClick={() => toggleSection(group.title)}
+                aria-expanded={openSections[group.title]}
+              >
+                <span className="nav-section-title">{group.title}</span>
+                <span className="nav-section-chevron" aria-hidden="true">
+                  {openSections[group.title] ? <Icons.IconChevronUp /> : <Icons.IconChevronDown />}
+                </span>
+              </button>
+              {openSections[group.title] ? (
+                <div className="nav-section-items">
+                  {group.items.map(([id, iconKey, label]) => {
+                    const IconComp = ICON_MAP[iconKey];
+                    return (
+                      <button
+                        className={`nav-item ${activeView === id ? "active" : ""}`}
+                        key={id}
+                        onClick={() => setActiveView(id)}
+                        type="button"
+                      >
+                        <span className="nav-icon">
+                          {IconComp ? <IconComp /> : null}
+                        </span>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ))}
         </nav>

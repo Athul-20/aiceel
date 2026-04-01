@@ -340,7 +340,7 @@ function ProgressTracker({ steps, activeIndex }) {
 }
 
 export default function PiiMasking() {
-  const { runPiiMasking, runPdfMasking, busy, hasActiveKey, setActiveView } = useApp();
+  const { runPiiMasking, runPdfMasking, busy, hasActiveKey, setActiveView, apiKeyReadiness } = useApp();
   const [activeTab, setActiveTab] = useState("text");
   const [text, setText] = useState(DEFAULT_TEXT);
   const [file, setFile] = useState(null);
@@ -370,7 +370,7 @@ export default function PiiMasking() {
   const historyItems = history.slice(0, 5);
   const diagnostics = [
     { label: "Backend", state: backendStatus.state, detail: backendStatus.detail },
-    { label: "API Key", state: hasActiveKey ? "ready" : "warn", detail: hasActiveKey ? "Authenticated and ready to run." : "Activate an API key to unlock masking." },
+    { label: "API Key", state: hasActiveKey ? "ready" : apiKeyReadiness.tone, detail: hasActiveKey ? "Authenticated and ready to run." : apiKeyReadiness.statusDetail },
     { label: "Preset", state: "ready", detail: `${activePreset.name} is loaded with ${enabledCount} entity controls.` },
     { label: "Review", state: pdfResult || result ? "ready" : "checking", detail: pdfResult ? "Audit report and review modes are available." : "Run a scan to unlock review tools." },
   ];
@@ -598,8 +598,8 @@ export default function PiiMasking() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to use PII Masking.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

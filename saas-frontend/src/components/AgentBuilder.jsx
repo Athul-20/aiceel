@@ -12,7 +12,7 @@ export default function AgentBuilder() {
     agentRunResult, selectedRunAgent, createAgent, deleteAgent, runAgentFromStudio,
     singleAgentTestAgentId, setSingleAgentTestAgentId, singleAgentTestService, setSingleAgentTestService,
     singleAgentTestPrompt, setSingleAgentTestPrompt, singleAgentTestResult, runSingleAgentTest,
-    services, busy, setActiveView, setPlaygroundAgentId, hasActiveKey
+    services, busy, setActiveView, setPlaygroundAgentId, hasActiveKey, apiKeyReadiness
   } = useApp();
 
   const selectedSingleAgent = agents.find((item) => String(item.id) === String(singleAgentTestAgentId)) || null;
@@ -53,8 +53,8 @@ export default function AgentBuilder() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to run agents.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

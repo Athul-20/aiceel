@@ -41,6 +41,31 @@ function readJsonStorage(key, fallback = null) {
   }
 }
 
+function getScopedApiKeyStorageKey(userLike) {
+  const scope = userLike?.id ?? userLike?.email ?? "";
+  return scope ? `${ACTIVE_API_KEY_STORAGE}:${scope}` : ACTIVE_API_KEY_STORAGE;
+}
+
+function readStoredActiveApiKey(userLike, allowLegacyFallback = false) {
+  const scopedValue = readStorage(getScopedApiKeyStorageKey(userLike), "");
+  if (scopedValue) return scopedValue;
+  return allowLegacyFallback ? readStorage(ACTIVE_API_KEY_STORAGE, "") : "";
+}
+
+function persistStoredActiveApiKey(userLike, value) {
+  const nextValue = (value || "").trim();
+  const scopedKey = getScopedApiKeyStorageKey(userLike);
+
+  if (nextValue) {
+    writeStorage(scopedKey, nextValue);
+    writeStorage(ACTIVE_API_KEY_STORAGE, nextValue);
+    return;
+  }
+
+  removeStorage(scopedKey);
+  removeStorage(ACTIVE_API_KEY_STORAGE);
+}
+
 export function useApp() {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useApp must be used within AppProvider");
@@ -49,6 +74,8 @@ export function useApp() {
 
 export function AppProvider({ children }) {
   const ACTIVE_VIEW_STORAGE = "aiccel_active_view";
+  const initialUser = readJsonStorage(USER_KEY, null);
+  const initialActiveApiKey = readStoredActiveApiKey(initialUser, true);
   const [theme, setTheme] = useState(() => {
     const storedTheme = readStorage(THEME_STORAGE_KEY, "light");
     return storedTheme === "dark" ? "dark" : "light";
@@ -59,15 +86,16 @@ export function AppProvider({ children }) {
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(readStorage(TOKEN_KEY, ""));
   const [refreshToken, setRefreshToken] = useState(readStorage(REFRESH_TOKEN_KEY, ""));
-  const [user, setUser] = useState(() => readJsonStorage(USER_KEY, null));
+  const [user, setUser] = useState(initialUser);
   const refreshInFlightRef = useRef(null);
 
   const [services, setServices] = useState([]);
   const [apiKeys, setApiKeys] = useState([]);
+  const [apiKeysLoaded, setApiKeysLoaded] = useState(false);
   const [apiKeyName, setApiKeyName] = useState("Primary Key");
   const [newRawKey, setNewRawKey] = useState("");
-  const [apiKeyInput, setApiKeyInput] = useState(readStorage(ACTIVE_API_KEY_STORAGE, ""));
-  const [activeApiKey, setActiveApiKey] = useState(readStorage(ACTIVE_API_KEY_STORAGE, ""));
+  const [apiKeyInput, setApiKeyInput] = useState(initialActiveApiKey);
+  const [activeApiKey, setActiveApiKey] = useState(initialActiveApiKey);
 
   const [setup, setSetup] = useState(DEFAULT_SETUP);
   const [setupUpdatedAt, setSetupUpdatedAt] = useState("");
@@ -86,7 +114,7 @@ export function AppProvider({ children }) {
   const [webhookEvents, setWebhookEvents] = useState(["workflow.completed", "workflow.failed"]);
 
   const [workspaces, setWorkspaces] = useState([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => readJsonStorage(USER_KEY, null)?.default_workspace_id ?? null);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => initialUser?.default_workspace_id ?? null);
   const [workspaceName, setWorkspaceName] = useState("Production Workspace");
   const [workspaceMembers, setWorkspaceMembers] = useState([]);
   const [memberEmail, setMemberEmail] = useState("");
@@ -142,8 +170,67 @@ export function AppProvider({ children }) {
   const [authNotice, setAuthNotice] = useState("");
 
   const isLoggedIn = useMemo(() => Boolean(token && user), [token, user]);
-  const activePrefix = useMemo(() => activeApiKey.slice(0, 12), [activeApiKey]);
-  const hasActiveKey = useMemo(() => apiKeys.some((i) => i.is_active && i.key_prefix === activePrefix), [apiKeys, activePrefix]);
+  const hasWorkspaceApiKey = useMemo(() => apiKeys.some((item) => item.is_active), [apiKeys]);
+  const hasLocalActiveKey = useMemo(() => Boolean(activeApiKey.trim()), [activeApiKey]);
+  const hasVerifiedActiveKey = useMemo(
+    () => apiKeys.some((item) => item.is_active && activeApiKey.startsWith(item.key_prefix)),
+    [apiKeys, activeApiKey],
+  );
+  const hasActiveKey = useMemo(() => {
+    if (!hasLocalActiveKey) return false;
+    if (!apiKeysLoaded) return true;
+    return hasVerifiedActiveKey;
+  }, [hasLocalActiveKey, apiKeysLoaded, hasVerifiedActiveKey]);
+  const apiKeyReadiness = useMemo(() => {
+    if (isLoggedIn && !apiKeysLoaded) {
+      return {
+        state: "checking",
+        tone: "checking",
+        alertMessage: "Checking workspace API keys...",
+        alertActionLabel: "Open API Keys",
+        statusLabel: "Checking",
+        statusDetail: "Loading active workspace keys from the server.",
+      };
+    }
+    if (!hasWorkspaceApiKey) {
+      return {
+        state: "missing_workspace_key",
+        tone: "warn",
+        alertMessage: "Create an API key in this workspace to use this feature.",
+        alertActionLabel: "Create API Key",
+        statusLabel: "Required",
+        statusDetail: "No active workspace API key was found on the server.",
+      };
+    }
+    if (!hasLocalActiveKey) {
+      return {
+        state: "missing_local_key",
+        tone: "warn",
+        alertMessage: "This workspace already has API keys. Activate one locally in API Keys to use it from this browser.",
+        alertActionLabel: "Open API Keys",
+        statusLabel: "Local activation needed",
+        statusDetail: "A workspace API key exists, but this browser does not have a local raw key activated.",
+      };
+    }
+    if (!hasActiveKey) {
+      return {
+        state: "stale_local_key",
+        tone: "warn",
+        alertMessage: "The local API key in this browser no longer matches an active workspace key. Activate a current key in API Keys.",
+        alertActionLabel: "Open API Keys",
+        statusLabel: "Re-activate key",
+        statusDetail: "The browser has a local key, but it does not match an active server-side workspace key.",
+      };
+    }
+    return {
+      state: "ready",
+      tone: "ready",
+      alertMessage: "",
+      alertActionLabel: "Manage API Keys",
+      statusLabel: "Ready",
+      statusDetail: "An active workspace key is verified and ready in this browser.",
+    };
+  }, [apiKeysLoaded, hasWorkspaceApiKey, hasLocalActiveKey, hasActiveKey, isLoggedIn]);
   const selectedRunAgent = useMemo(() => agents.find((i) => String(i.id) === String(agentRunAgentId)) || null, [agents, agentRunAgentId]);
   const metrics = useMemo(() => [
     ["Services", services.length], ["Features", featureCatalog.length],
@@ -157,25 +244,36 @@ export function AppProvider({ children }) {
   const activeWorkspace = useMemo(() => workspaces.find((i) => i.id === activeWorkspaceId) || null, [workspaces, activeWorkspaceId]);
 
   // ── Auth helpers ─────────────────────────────
+  function setLocalActiveApiKey(nextKey, userLike = user) {
+    const normalizedKey = (nextKey || "").trim();
+    setActiveApiKey(normalizedKey);
+    setApiKeyInput(normalizedKey);
+    persistStoredActiveApiKey(userLike, normalizedKey);
+  }
+
   function applySession(payload) {
     const t = payload?.access_token || "";
     const r = payload?.refresh_token || "";
     const u = payload?.user || null;
     setToken(t); setRefreshToken(r); setUser(u);
+    setApiKeys([]);
+    setApiKeysLoaded(false);
     writeStorage(TOKEN_KEY, t);
     writeStorage(REFRESH_TOKEN_KEY, r);
     if (u) writeStorage(USER_KEY, JSON.stringify(u));
     else removeStorage(USER_KEY);
+    const restoredApiKey = readStoredActiveApiKey(u);
+    setActiveApiKey(restoredApiKey);
+    setApiKeyInput(restoredApiKey);
     setError(""); setNotice(""); setAuthError(""); setAuthNotice("");
   }
 
   function clearSession(message = "") {
     setToken(""); setRefreshToken(""); setUser(null);
-    setApiKeys([]); setActiveApiKey(""); setApiKeyInput("");
+    setApiKeys([]); setApiKeysLoaded(false); setActiveApiKey(""); setApiKeyInput("");
     removeStorage(TOKEN_KEY);
     removeStorage(REFRESH_TOKEN_KEY);
     removeStorage(USER_KEY);
-    removeStorage(ACTIVE_API_KEY_STORAGE);
     setError("");
     setNotice("");
     setAuthNotice("");
@@ -209,11 +307,16 @@ export function AppProvider({ children }) {
   }
 
   // ── Data loaders ─────────────────────────────
-  async function refreshApiKeys(t = token) {
+  async function refreshApiKeys(t = token, workspaceId = activeWorkspaceId) {
     try {
-      const keys = await withBearerRetry((tok) => api.listApiKeys(tok, activeWorkspaceId), t);
+      const keys = await withBearerRetry((tok) => api.listApiKeys(tok, workspaceId), t);
       setApiKeys(keys);
-    } catch (err) { console.error("Failed to refresh API keys:", err); }
+      setApiKeysLoaded(true);
+    } catch (err) {
+      setApiKeys([]);
+      setApiKeysLoaded(true);
+      console.error("Failed to refresh API keys:", err);
+    }
   }
 
   async function loadWorkspaces(t = token) {
@@ -243,8 +346,7 @@ export function AppProvider({ children }) {
       const allUnauthorized = results.every((r) => r.status === "rejected" && r.reason?.status === 401);
       if (allUnauthorized) {
         console.warn("Stored API key is invalid or expired — clearing it.");
-        setActiveApiKey(""); setApiKeyInput("");
-        writeStorage(ACTIVE_API_KEY_STORAGE, "");
+        setLocalActiveApiKey("");
         return;
       }
 
@@ -305,7 +407,7 @@ export function AppProvider({ children }) {
     try {
       const data = await withBearerRetry((tok) => api.createApiKey(tok, apiKeyName, activeWorkspaceId));
       setNewRawKey(data.api_key || "");
-      if (data.api_key) { setApiKeyInput(data.api_key); setActiveApiKey(data.api_key); writeStorage(ACTIVE_API_KEY_STORAGE, data.api_key); }
+      if (data.api_key) setLocalActiveApiKey(data.api_key);
       setNotice("API key created.");
       await refreshApiKeys();
     } catch (err) { setError(err.message); }
@@ -316,14 +418,19 @@ export function AppProvider({ children }) {
     e.preventDefault();
     const k = apiKeyInput.trim();
     if (!k) return;
-    setActiveApiKey(k); writeStorage(ACTIVE_API_KEY_STORAGE, k);
+    setLocalActiveApiKey(k);
     setNotice(`Key ${k.slice(0, 12)}... activated.`);
   }
 
   async function revokeKey(id) {
     setBusy(true); setError("");
     try {
+      const revokedKey = apiKeys.find((item) => item.id === id) || null;
       await withBearerRetry((tok) => api.revokeApiKey(tok, id, activeWorkspaceId));
+      setApiKeys((prev) => prev.filter((item) => item.id !== id));
+      if (revokedKey && activeApiKey.startsWith(revokedKey.key_prefix)) {
+        setLocalActiveApiKey("");
+      }
       setNotice("Key revoked.");
       await refreshApiKeys();
     } catch (err) { setError(err.message); }
@@ -527,7 +634,8 @@ export function AppProvider({ children }) {
       await withBearerRetry((tok) => api.switchWorkspace(tok, wsId));
       setActiveWorkspaceId(wsId);
       setNotice("Workspace switched.");
-      await refreshApiKeys();
+      setApiKeysLoaded(false);
+      await refreshApiKeys(token, wsId);
       if (activeApiKey) await loadSecuredContext(activeApiKey);
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
@@ -656,6 +764,11 @@ export function AppProvider({ children }) {
     }
   }, [theme]);
   useEffect(() => {
+    if (user && activeApiKey) {
+      persistStoredActiveApiKey(user, activeApiKey);
+    }
+  }, [user, activeApiKey]);
+  useEffect(() => {
     if (isLoggedIn && activeApiKey) loadOpsContext(activeApiKey, activeView);
   }, [isLoggedIn, activeApiKey, activeView]);
   useEffect(() => { if (user?.default_workspace_id) setActiveWorkspaceId(user.default_workspace_id); }, [user]);
@@ -670,7 +783,8 @@ export function AppProvider({ children }) {
     activeView, setActiveView, activeViewMeta, metrics,
     // API Keys
     apiKeys, apiKeyName, setApiKeyName, newRawKey, setNewRawKey, apiKeyInput, setApiKeyInput,
-    activeApiKey, hasActiveKey, activePrefix,
+    activeApiKey, apiKeysLoaded, hasWorkspaceApiKey, hasLocalActiveKey, hasActiveKey,
+    apiKeyReadiness,
     createKey, activateKey, revokeKey,
     // Providers
     providerStatuses, providerInputs, setProviderInput,

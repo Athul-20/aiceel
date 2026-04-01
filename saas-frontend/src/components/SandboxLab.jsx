@@ -3,7 +3,7 @@ import { Field, FeaturePageHeader, ResultPanel } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function SandboxLab() {
-  const { labLanguage, setLabLanguage, labCode, setLabCode, labInput, setLabInput, labResult, runLab, busy, hasActiveKey, setActiveView } = useApp();
+  const { labLanguage, setLabLanguage, labCode, setLabCode, labInput, setLabInput, labResult, runLab, busy, hasActiveKey, setActiveView, apiKeyReadiness } = useApp();
 
   return (
     <div className="feature-page">
@@ -16,8 +16,8 @@ export default function SandboxLab() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to use Sandbox Lab.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

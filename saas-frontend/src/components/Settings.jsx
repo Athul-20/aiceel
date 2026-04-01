@@ -1,11 +1,14 @@
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Field, FeaturePageHeader, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function Settings() {
+  const [pendingRevokeKey, setPendingRevokeKey] = useState(null);
+  const [revokeConfirmationText, setRevokeConfirmationText] = useState("");
   const {
     activeView, apiKeys, apiKeyName, setApiKeyName, newRawKey, setNewRawKey, apiKeyInput, setApiKeyInput,
-    activeApiKey, createKey, activateKey, revokeKey, busy, copyText, // Keys
+    activeApiKey, hasActiveKey, hasWorkspaceApiKey, apiKeyReadiness, createKey, activateKey, revokeKey, busy, copyText, // Keys
     providerStatuses, providerInputs, setProviderInput, saveProviderKey, deleteProviderKey, // Providers
     usageSummary, usageEvents, quotaStatus, // Usage
     webhooks, webhookDeliveries, webhookUrl, setWebhookUrl, webhookSecret, setWebhookSecret,
@@ -16,6 +19,39 @@ export default function Settings() {
   const orderedUsageEvents = [...(usageEvents || [])].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+  const revokeTextMatches = useMemo(() => revokeConfirmationText.trim() === "REVOKE", [revokeConfirmationText]);
+
+  useEffect(() => {
+    if (!pendingRevokeKey) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !busy) {
+        setPendingRevokeKey(null);
+        setRevokeConfirmationText("");
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pendingRevokeKey, busy]);
+
+  function requestRevoke(key) {
+    setPendingRevokeKey(key);
+    setRevokeConfirmationText("");
+  }
+
+  function cancelRevoke() {
+    if (busy) return;
+    setPendingRevokeKey(null);
+    setRevokeConfirmationText("");
+  }
+
+  async function confirmRevoke() {
+    if (!pendingRevokeKey || !revokeTextMatches || busy) return;
+    await revokeKey(pendingRevokeKey.id);
+    setPendingRevokeKey(null);
+    setRevokeConfirmationText("");
+  }
 
   // Determine title and description based on active setting view
   let title = "", desc = "", icon = null;
@@ -37,6 +73,11 @@ export default function Settings() {
               <h3>Create Key</h3>
               <p>Generate a new environment key.</p>
             </div>
+            {hasWorkspaceApiKey && !hasActiveKey && (
+              <div className="key-alert" style={{ marginBottom: "1rem" }}>
+                <span>{apiKeyReadiness.alertMessage} The list on the right only shows server-side prefixes, not the full raw key.</span>
+              </div>
+            )}
             <form className="form-grid" onSubmit={createKey}>
               <Field label="Key Name"><input value={apiKeyName} onChange={(e) => setApiKeyName(e.target.value)} required /></Field>
               <button className="btn-primary" disabled={busy} type="submit">{busy ? "Creating..." : "Generate Key"}</button>
@@ -45,11 +86,11 @@ export default function Settings() {
             
             <div className="card-head">
               <h3>Active Local Key</h3>
-              <p>The key currently used by this frontend dashboard.</p>
+              <p>The full raw key currently used by this frontend dashboard. Backend key lists only expose prefixes.</p>
             </div>
             <form className="form-grid" onSubmit={activateKey}>
               <Field label="API Key">
-                <input type="password" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} required placeholder="acc_live_..." />
+                <input type="password" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} required placeholder="ak_live_..." />
               </Field>
               <button className="btn-ghost btn-full" type="submit">Activate Local Key</button>
             </form>
@@ -68,7 +109,7 @@ export default function Settings() {
                     <p className="sublist-meta">{k.key_prefix}... • {new Date(k.created_at).toLocaleDateString()}</p>
                     {activeApiKey.startsWith(k.key_prefix) && <ResultBadge type="safe" style={{ marginTop: "0.4rem" }}>Currently Active</ResultBadge>}
                   </div>
-                  <button className="btn-danger btn-sm" onClick={() => revokeKey(k.id)}>Revoke</button>
+                  <button className="btn-danger btn-sm" type="button" onClick={() => requestRevoke(k)}>Revoke</button>
                 </article>
               ))}
               {!apiKeys.length && <p className="muted">No active keys.</p>}
@@ -289,6 +330,45 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {pendingRevokeKey ? (
+        <div className="popup-overlay" onClick={cancelRevoke} role="presentation">
+          <div
+            className="popup-box confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="revoke-confirm-title"
+            aria-describedby="revoke-confirm-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="confirm-dialog-icon" aria-hidden="true">
+              <Icons.IconKey />
+            </div>
+            <h2 id="revoke-confirm-title">Revoke this API key?</h2>
+            <p id="revoke-confirm-description">
+              This will immediately disable <strong>{pendingRevokeKey.name}</strong> for this workspace. Type <strong>REVOKE</strong> below to confirm.
+            </p>
+            <div className="field revoke-confirm-field">
+              <span>Confirmation Text</span>
+              <input
+                autoFocus
+                value={revokeConfirmationText}
+                onChange={(event) => setRevokeConfirmationText(event.target.value)}
+                placeholder="Type REVOKE"
+              />
+              <small className="muted revoke-confirm-hint">Exact match required.</small>
+            </div>
+            <div className="confirm-actions">
+              <button className="btn-ghost btn-full" type="button" onClick={cancelRevoke} disabled={busy}>
+                Cancel
+              </button>
+              <button className="btn-danger btn-full" type="button" onClick={confirmRevoke} disabled={!revokeTextMatches || busy}>
+                {busy ? "Revoking..." : "Revoke Key"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

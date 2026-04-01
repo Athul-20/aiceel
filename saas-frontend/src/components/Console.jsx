@@ -8,7 +8,7 @@ import * as Icons from "./Icons";
 export default function Console() {
   const {
     engineOperation, setEngineOperation, enginePayload, setEnginePayload,
-    engineResult, engineRequestMeta, runFeatureApi, busy, hasActiveKey, setActiveView, copyText
+    engineResult, engineRequestMeta, runFeatureApi, busy, hasActiveKey, setActiveView, copyText, apiKeyReadiness
   } = useApp();
 
   const [scenarioQuery, setScenarioQuery] = useState("");
@@ -195,8 +195,8 @@ print(response.json())`;
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to use the Console.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

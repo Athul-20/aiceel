@@ -25,7 +25,7 @@ const EXAMPLE_INSTRUCTIONS = [
 ];
 
 export default function PandoraLab() {
-  const { activeApiKey, busy: globalBusy, hasActiveKey, setActiveView, setError, setNotice, copyText } = useApp();
+  const { activeApiKey, busy: globalBusy, hasActiveKey, setActiveView, setError, setNotice, copyText, apiKeyReadiness } = useApp();
 
   const [csvData, setCsvData] = useState(SAMPLE_DATA);
   const [instruction, setInstruction] = useState("Show only employees in Engineering department and sort by salary descending");
@@ -53,7 +53,7 @@ export default function PandoraLab() {
 
   async function runTransform(e) {
     e.preventDefault();
-    if (!activeApiKey) { setError("Activate an API key first"); return; }
+    if (!hasActiveKey || !activeApiKey) { setError(apiKeyReadiness.alertMessage); return; }
     setBusy(true); setResult(null); setError("");
 
     try {
@@ -107,8 +107,8 @@ export default function PandoraLab() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key and configure a provider to use Pandora.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage} Configure a provider as well to use Pandora.</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 

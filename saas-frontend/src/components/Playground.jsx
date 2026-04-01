@@ -6,7 +6,7 @@ export default function Playground() {
   const {
     services, agents, playgroundService, setPlaygroundService,
     playgroundAgentId, setPlaygroundAgentId, playgroundPrompt, setPlaygroundPrompt,
-    playgroundResult, runPlayground, busy, hasActiveKey, setActiveView
+    playgroundResult, runPlayground, busy, hasActiveKey, setActiveView, apiKeyReadiness
   } = useApp();
 
   return (
@@ -20,8 +20,8 @@ export default function Playground() {
 
       {!hasActiveKey && (
         <div className="key-alert">
-          <span>Activate an API key to use the playground.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{apiKeyReadiness.alertMessage}</span>
+          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>{apiKeyReadiness.alertActionLabel}</button>
         </div>
       )}
 
