@@ -360,6 +360,13 @@ textarea {
   margin-bottom: var(--sp-1);
 }
 
+.auth-card-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
 .auth-card-head p {
   font-size: var(--text-sm);
   color: var(--grey-500);
@@ -369,6 +376,7 @@ textarea {
   display: flex;
   gap: 0;
   background: var(--grey-100);
+  border: 1px solid var(--border);
   border-radius: var(--radius-full);
   padding: 3px;
 }
@@ -376,20 +384,34 @@ textarea {
 .auth-switch button {
   flex: 1;
   padding: var(--sp-2) var(--sp-4);
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-full);
   background: transparent;
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--grey-500);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background var(--duration-normal) var(--ease-out-expo),
+    color var(--duration-fast) var(--ease-out-expo),
+    border-color var(--duration-fast) var(--ease-out-expo),
+    box-shadow var(--duration-fast) var(--ease-out-expo),
+    transform var(--duration-fast) var(--ease-out-expo);
+}
+
+.auth-switch button:hover:not(.active) {
+  color: var(--grey-800);
 }
 
 .auth-switch button.active {
-  background: var(--white);
+  background: var(--nav-active-bg);
+  border-color: var(--nav-active-border);
   color: var(--grey-950);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--nav-active-shadow), var(--shadow-xs);
+}
+
+.auth-theme-toggle {
+  flex-shrink: 0;
 }
 
 .auth-form {
@@ -3578,6 +3600,16 @@ select {
 }
 
 @media (max-width: 640px) {
+  .auth-card-head-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auth-theme-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
   .top-bar {
     padding: var(--sp-4);
   }
