@@ -2,7 +2,7 @@ import { useApp } from "../context/AppContext";
 import { Field } from "./Shared";
 
 export default function AuthScreen() {
-  const { mode, setMode, email, setEmail, password, setPassword, busy, error, notice, authSubmit } = useApp();
+  const { mode, setMode, email, setEmail, password, setPassword, busy, authError, authNotice, authSubmit } = useApp();
 
   return (
     <div className="auth-shell">
@@ -40,8 +40,8 @@ export default function AuthScreen() {
             <p>{mode === "login" ? "Sign in to access your AICCEL workspace." : "Start building with AICCEL features."}</p>
           </div>
 
-          {error ? <div className="banner error">{error}</div> : null}
-          {notice ? <div className="banner ok">{notice}</div> : null}
+          {authError ? <div className="banner error">{authError}</div> : null}
+          {authNotice ? <div className="banner ok">{authNotice}</div> : null}
 
           <div className="auth-switch">
             <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">Sign in</button>

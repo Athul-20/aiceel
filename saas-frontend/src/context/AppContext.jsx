@@ -138,6 +138,8 @@ export function AppProvider({ children }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
 
   const isLoggedIn = useMemo(() => Boolean(token && user), [token, user]);
   const activePrefix = useMemo(() => activeApiKey.slice(0, 12), [activeApiKey]);
@@ -164,7 +166,7 @@ export function AppProvider({ children }) {
     writeStorage(REFRESH_TOKEN_KEY, r);
     if (u) writeStorage(USER_KEY, JSON.stringify(u));
     else removeStorage(USER_KEY);
-    setError(""); setNotice("");
+    setError(""); setNotice(""); setAuthError(""); setAuthNotice("");
   }
 
   function clearSession(message = "") {
@@ -174,7 +176,10 @@ export function AppProvider({ children }) {
     removeStorage(REFRESH_TOKEN_KEY);
     removeStorage(USER_KEY);
     removeStorage(ACTIVE_API_KEY_STORAGE);
-    if (message) setError(message);
+    setError("");
+    setNotice("");
+    setAuthNotice("");
+    setAuthError(message);
   }
 
   async function refreshAccessToken() {
@@ -285,12 +290,12 @@ export function AppProvider({ children }) {
 
   // ── Auth actions ─────────────────────────────
   async function authSubmit(e) {
-    e.preventDefault(); setBusy(true); setError(""); setNotice("");
+    e.preventDefault(); setBusy(true); setError(""); setNotice(""); setAuthError(""); setAuthNotice("");
     try {
       const data = mode === "register" ? await api.register(email, password) : await api.login(email, password);
-      if (mode === "register" && !data.access_token) { setNotice("Registered. Please sign in."); setMode("login"); }
+      if (mode === "register" && !data.access_token) { setAuthNotice("Registered. Please sign in."); setMode("login"); }
       else applySession(data);
-    } catch (err) { setError(err.message); }
+    } catch (err) { setAuthError(err.message); }
     finally { setBusy(false); }
   }
 
@@ -659,7 +664,7 @@ export function AppProvider({ children }) {
     // Theme
     theme, setTheme, toggleTheme,
     // Auth
-    mode, setMode, email, setEmail, password, setPassword, token, user, isLoggedIn,
+    mode, setMode, email, setEmail, password, setPassword, token, user, isLoggedIn, authError, authNotice,
     authSubmit, logout, applySession, clearSession,
     // Views
     activeView, setActiveView, activeViewMeta, metrics,
