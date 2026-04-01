@@ -4,6 +4,20 @@ import { Field, FeaturePageHeader, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
 const USAGE_CHART_COLORS = ["#2563eb", "#f59e0b", "#16a34a"];
+const MONTH_OPTIONS = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
 
 function titleCase(value) {
   return String(value || "")
@@ -137,9 +151,8 @@ function UsageLineChart({ title, subtitle, data }) {
   const xStep = data.buckets.length > 1 ? chartWidth / (data.buckets.length - 1) : 0;
   const axisIndexes = Array.from(new Set([0, Math.floor((data.buckets.length - 1) / 2), data.buckets.length - 1]));
   const safeHoveredIndex = hoveredIndex == null ? data.buckets.length - 1 : hoveredIndex;
-  const tooltipLeft = data.buckets.length === 1
-    ? 50
-    : (safeHoveredIndex / Math.max(1, data.buckets.length - 1)) * 100;
+  const hoverX = paddingX + (data.buckets.length === 1 ? chartWidth / 2 : safeHoveredIndex * xStep);
+  const tooltipLeft = Math.min(92, Math.max(8, (hoverX / width) * 100));
   const tooltipValues = visibleSeries
     .map((series) => ({
       label: series.label,
@@ -201,9 +214,9 @@ function UsageLineChart({ title, subtitle, data }) {
           {hoveredIndex != null ? (
             <line
               className="usage-line-focus"
-              x1={paddingX + (data.buckets.length === 1 ? chartWidth / 2 : safeHoveredIndex * xStep)}
+              x1={hoverX}
               y1={paddingTop}
-              x2={paddingX + (data.buckets.length === 1 ? chartWidth / 2 : safeHoveredIndex * xStep)}
+              x2={hoverX}
               y2={paddingTop + chartHeight}
             />
           ) : null}
@@ -266,9 +279,14 @@ function UsageLineChart({ title, subtitle, data }) {
 }
 
 export default function Settings() {
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
   const [pendingRevokeKey, setPendingRevokeKey] = useState(null);
   const [revokeConfirmationText, setRevokeConfirmationText] = useState("");
   const [usageSource, setUsageSource] = useState("workspace");
+  const [usageChartMode, setUsageChartMode] = useState("endpoint");
+  const [usageMonth, setUsageMonth] = useState(currentMonth);
+  const [usageYear, setUsageYear] = useState(currentYear);
   const [selectedUsageApiKeyId, setSelectedUsageApiKeyId] = useState("all");
   const [usageLoading, setUsageLoading] = useState(false);
   const [scopedUsageSummary, setScopedUsageSummary] = useState(null);
@@ -299,6 +317,25 @@ export default function Settings() {
     () => buildTimeSeries(orderedUsageEvents, (event) => getUsageCategory(event.feature)),
     [orderedUsageEvents]
   );
+  const usageYearOptions = useMemo(
+    () => Array.from({ length: 6 }, (_, index) => currentYear - index),
+    [currentYear]
+  );
+  const activeUsageChart = usageChartMode === "endpoint"
+    ? {
+        title: "By Endpoint",
+        subtitle: "Billed units over time for the busiest recent endpoints.",
+        data: endpointUsage,
+      }
+    : {
+        title: "By Category",
+        subtitle: "Recent traffic patterns grouped by service area.",
+        data: categoryUsage,
+      };
+  const selectedPeriodLimit = scopedUsageSummary?.limits?.monthly_units ?? quotaStatus?.limit_units ?? null;
+  const selectedPeriodRemaining = selectedPeriodLimit != null
+    ? Math.max(0, Number(selectedPeriodLimit) - Number(scopedUsageSummary?.usage?.unit_count || 0))
+    : null;
 
   useEffect(() => {
     if (!pendingRevokeKey) return undefined;
@@ -320,6 +357,8 @@ export default function Settings() {
     let cancelled = false;
     const options = {
       source: usageSource,
+      month: usageMonth,
+      year: usageYear,
       ...(usageSource === "api" && selectedUsageApiKeyId !== "all" ? { api_key_id: selectedUsageApiKeyId } : {}),
     };
 
@@ -342,7 +381,7 @@ export default function Settings() {
     return () => {
       cancelled = true;
     };
-  }, [activeView, usageSource, selectedUsageApiKeyId]);
+  }, [activeView, usageSource, usageMonth, usageYear, selectedUsageApiKeyId]);
 
   function requestRevoke(key) {
     setPendingRevokeKey(key);
@@ -474,6 +513,26 @@ export default function Settings() {
                   API
                 </button>
               </div>
+              <div className="usage-period-filters">
+                <select
+                  className="usage-filter-select"
+                  value={usageMonth}
+                  onChange={(event) => setUsageMonth(Number(event.target.value))}
+                >
+                  {MONTH_OPTIONS.map((month) => (
+                    <option key={month.value} value={month.value}>{month.label}</option>
+                  ))}
+                </select>
+                <select
+                  className="usage-filter-select"
+                  value={usageYear}
+                  onChange={(event) => setUsageYear(Number(event.target.value))}
+                >
+                  {usageYearOptions.map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
               {usageSource === "api" ? (
                 <select
                   className="usage-key-select"
@@ -493,27 +552,40 @@ export default function Settings() {
                 <article className="stat-card"><span>Tokens Used</span><strong>{scopedUsageSummary.usage.token_count}</strong></article>
                 <article className="stat-card"><span>Requests Executed</span><strong>{scopedUsageSummary.usage.request_count}</strong></article>
                 <article className="stat-card"><span>Tracked Scope</span><strong>{usageSource === "workspace" ? "Workspace" : (selectedUsageApiKey?.name || "All API Keys")}</strong></article>
-                <article className="stat-card"><span>Monthly Limit</span><strong>{quotaStatus?.limit_units?.toLocaleString?.() ?? scopedUsageSummary?.limits?.monthly_units?.toLocaleString?.() ?? "N/A"}</strong></article>
-                <article className="stat-card"><span>Remaining Units</span><strong>{quotaStatus?.remaining_units?.toLocaleString?.() ?? "N/A"}</strong></article>
+                <article className="stat-card"><span>Monthly Limit</span><strong>{selectedPeriodLimit?.toLocaleString?.() ?? "N/A"}</strong></article>
+                <article className="stat-card"><span>Remaining Units</span><strong>{selectedPeriodRemaining?.toLocaleString?.() ?? "N/A"}</strong></article>
               </div>
             ) : <p className="muted">{usageLoading ? "Loading usage statistics..." : "No usage statistics available."}</p>}
           </section>
           <section className="card usage-events-card">
             <div className="card-head usage-events-head">
-              <h3>Recent Traffic</h3>
-              <p>{usageLoading ? "Loading..." : `${orderedUsageEvents.length} events`}</p>
+              <div>
+                <h3>Recent Traffic</h3>
+                <p>{usageLoading ? "Loading..." : `${orderedUsageEvents.length} events`}</p>
+              </div>
+              <div className="auth-switch usage-chart-switch">
+                <button
+                  className={usageChartMode === "endpoint" ? "active" : ""}
+                  type="button"
+                  onClick={() => setUsageChartMode("endpoint")}
+                >
+                  Endpoint
+                </button>
+                <button
+                  className={usageChartMode === "category" ? "active" : ""}
+                  type="button"
+                  onClick={() => setUsageChartMode("category")}
+                >
+                  Category
+                </button>
+              </div>
             </div>
             {orderedUsageEvents.length ? (
-              <div className="usage-graph-grid">
+              <div className="usage-graph-panel">
                 <UsageLineChart
-                  title="By Endpoint"
-                  subtitle="Billed units over time for the busiest recent endpoints."
-                  data={endpointUsage}
-                />
-                <UsageLineChart
-                  title="By Category"
-                  subtitle="Recent traffic patterns grouped by service area."
-                  data={categoryUsage}
+                  title={activeUsageChart.title}
+                  subtitle={activeUsageChart.subtitle}
+                  data={activeUsageChart.data}
                 />
               </div>
             ) : !usageLoading ? (

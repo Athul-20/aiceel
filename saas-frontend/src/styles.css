@@ -428,9 +428,21 @@ textarea {
   max-width: 320px;
 }
 
+.usage-period-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.usage-filter-select,
 .usage-key-select {
   min-width: 220px;
   max-width: 320px;
+}
+
+.usage-filter-select {
+  min-width: 160px;
 }
 
 .usage-graph-grid {
@@ -438,6 +450,10 @@ textarea {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: var(--sp-4);
   margin-bottom: var(--sp-4);
+}
+
+.usage-graph-panel {
+  margin-bottom: var(--sp-2);
 }
 
 .usage-graph-card {
@@ -2825,7 +2841,16 @@ select {
 }
 
 .usage-events-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
   flex-shrink: 0;
+}
+
+.usage-chart-switch {
+  min-width: 220px;
+  max-width: 280px;
 }
 
 .usage-events-scroll {
@@ -3711,6 +3736,22 @@ select {
 @media (max-width: 640px) {
   .content-area {
     padding: var(--sp-4);
+  }
+  .usage-events-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .usage-period-filters {
+    width: 100%;
+  }
+  .usage-filter-select {
+    min-width: 0;
+    flex: 1;
+  }
+  .usage-chart-switch {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
   }
   .pii-hero-shell,
   .pii-control-strip,

@@ -39,6 +39,18 @@ def _usage_query(
     return query
 
 
+def _period_bounds(month: int | None, year: int | None) -> tuple[datetime, datetime]:
+    now = datetime.now(timezone.utc)
+    target_month = month or now.month
+    target_year = year or now.year
+    period_start = datetime(target_year, target_month, 1, tzinfo=timezone.utc)
+    if target_month == 12:
+        period_end = datetime(target_year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        period_end = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
+    return period_start, period_end
+
+
 @router.get("/summary", response_model=UsageSummaryResponse)
 def get_usage_summary(
     request: Request,
@@ -46,6 +58,8 @@ def get_usage_summary(
     db: Session = Depends(get_db),
     source: str = Query(default="all", pattern="^(all|workspace|api)$"),
     api_key_id: int | None = Query(default=None, ge=1),
+    month: int | None = Query(default=None, ge=1, le=12),
+    year: int | None = Query(default=None, ge=2000, le=2100),
 ) -> UsageSummaryResponse:
     user, _ = user_auth
     assert_workspace_role(request, "viewer")
@@ -62,7 +76,10 @@ def get_usage_summary(
         workspace = _Workspace()
 
     limits = get_workspace_limits(workspace)
-    if source == "all" and api_key_id is None:
+    period_start, period_end = _period_bounds(month, year)
+    now = datetime.now(timezone.utc)
+    is_current_period = period_start.year == now.year and period_start.month == now.month
+    if source == "all" and api_key_id is None and is_current_period:
         usage = get_workspace_monthly_usage(db, workspace.id)
         usage_dict = usage_to_dict(usage)
     else:
@@ -72,9 +89,11 @@ def get_usage_summary(
             source=source,
             api_key_id=api_key_id,
         )
-        month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         request_count, token_count, runtime_ms, unit_count = (
-            base_query.filter(MeterEvent.created_at >= month_start).with_entities(
+            base_query.filter(
+                MeterEvent.created_at >= period_start,
+                MeterEvent.created_at < period_end,
+            ).with_entities(
                 func.count(MeterEvent.id),
                 func.coalesce(func.sum(MeterEvent.tokens), 0),
                 func.coalesce(func.sum(MeterEvent.runtime_ms), 0),
@@ -82,7 +101,7 @@ def get_usage_summary(
             ).one()
         )
         usage_dict = {
-            "period_start": get_workspace_monthly_usage(db, workspace.id).period_start.isoformat(),
+            "period_start": period_start.date().isoformat(),
             "period_type": "month",
             "request_count": int(request_count or 0),
             "token_count": int(token_count or 0),
@@ -109,6 +128,8 @@ def list_usage_events(
     status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=20),
     source: str = Query(default="all", pattern="^(all|workspace|api)$"),
     api_key_id: int | None = Query(default=None, ge=1),
+    month: int | None = Query(default=None, ge=1, le=12),
+    year: int | None = Query(default=None, ge=2000, le=2100),
     sort: str = Query(default="created_at", pattern="^(created_at|units|tokens|runtime_ms)$"),
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> list[UsageEventOut]:
@@ -126,6 +147,11 @@ def list_usage_events(
         status_filter=status_filter,
         source=source,
         api_key_id=api_key_id,
+    )
+    period_start, period_end = _period_bounds(month, year)
+    query = query.filter(
+        MeterEvent.created_at >= period_start,
+        MeterEvent.created_at < period_end,
     )
 
     total = query.count()
