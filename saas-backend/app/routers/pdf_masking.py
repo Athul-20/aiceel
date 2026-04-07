@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import unicodedata
+from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Set, cast
 
 import fitz  # PyMuPDF
@@ -104,6 +105,37 @@ def _compact_entity_text(value: str) -> str:
 def _canonical_entity_type(entity_type: str) -> str:
     normalized = (entity_type or "").strip().lower().replace(" ", "_")
     return ENTITY_TYPE_ALIASES.get(normalized, normalized)
+
+
+def _usage_entity_kind(entity_type: str) -> str:
+    kind = _canonical_entity_type(entity_type)
+    usage_aliases = {
+        "emails": "email",
+        "phones": "phone",
+        "persons": "person",
+        "organizations": "organization",
+        "addresses": "address",
+        "birthdays": "dob",
+        "bank_accounts": "bank_account",
+        "passports": "passport",
+        "pancards": "pancard",
+        "blood_groups": "blood_group",
+        "cards": "card",
+        "ssns": "ssn",
+    }
+    return usage_aliases.get(kind, kind)
+
+
+def _usage_entity_metadata(entities: Sequence[Dict[str, Any]]) -> dict[str, dict[str, int]]:
+    counts: Counter[str] = Counter()
+    for entity in entities:
+        kind = _usage_entity_kind(str(entity.get("type", "")))
+        if kind:
+            counts[kind] += 1
+    return {
+        "entity_counts": dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))),
+        "entity_total": int(sum(counts.values())),
+    }
 
 
 def _passes_luhn(candidate: str) -> bool:
@@ -647,6 +679,7 @@ async def mask_pdf_document(
                 feature="engine.pdf.mask",
                 units=max(1, total_redacted // 4),
                 request_id=getattr(request.state, "request_id", None),
+                metadata=_usage_entity_metadata(unique_entities),
             )
         except Exception as exc:
             logger.error("Metering failed: %s", exc)

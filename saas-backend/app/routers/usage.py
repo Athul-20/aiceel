@@ -3,12 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import assert_workspace_role, get_auth_context, get_user_from_api_key
-from app.metering import get_workspace_limits, get_workspace_monthly_usage, usage_to_dict
+from app.metering import (
+    aggregate_entity_counts,
+    get_workspace_limits,
+    parse_event_metadata,
+)
 from app.models import MeterEvent, User
 from app.schemas import UsageEventOut, UsageSummaryResponse
 
@@ -51,6 +54,30 @@ def _period_bounds(month: int | None, year: int | None) -> tuple[datetime, datet
     return period_start, period_end
 
 
+def _dedupe_usage_rows(rows: list[MeterEvent]) -> list[MeterEvent]:
+    request_ids_with_feature = {
+        row.request_id
+        for row in rows
+        if row.request_id and not str(row.feature or "").startswith("request:")
+    }
+    suppressed_request_paths = {
+        "/v1/engine/security/process",
+        "/v1/pii/mask",
+        "/v1/sentinel/analyze",
+    }
+    return [
+        row
+        for row in rows
+        if not (
+            str(row.feature or "").startswith("request:")
+            and (
+                any(path in str(row.feature or "") for path in suppressed_request_paths)
+                or (row.request_id and row.request_id in request_ids_with_feature)
+            )
+        )
+    ]
+
+
 @router.get("/summary", response_model=UsageSummaryResponse)
 def get_usage_summary(
     request: Request,
@@ -77,42 +104,35 @@ def get_usage_summary(
 
     limits = get_workspace_limits(workspace)
     period_start, period_end = _period_bounds(month, year)
-    now = datetime.now(timezone.utc)
-    is_current_period = period_start.year == now.year and period_start.month == now.month
-    if source == "all" and api_key_id is None and is_current_period:
-        usage = get_workspace_monthly_usage(db, workspace.id)
-        usage_dict = usage_to_dict(usage)
-    else:
-        base_query = _usage_query(
+    filtered_rows = _dedupe_usage_rows(
+        _usage_query(
             db,
             workspace_id=workspace.id,
             source=source,
             api_key_id=api_key_id,
-        )
-        request_count, token_count, runtime_ms, unit_count = (
-            base_query.filter(
-                MeterEvent.created_at >= period_start,
-                MeterEvent.created_at < period_end,
-            ).with_entities(
-                func.count(MeterEvent.id),
-                func.coalesce(func.sum(MeterEvent.tokens), 0),
-                func.coalesce(func.sum(MeterEvent.runtime_ms), 0),
-                func.coalesce(func.sum(MeterEvent.units), 0),
-            ).one()
-        )
-        usage_dict = {
-            "period_start": period_start.date().isoformat(),
-            "period_type": "month",
-            "request_count": int(request_count or 0),
-            "token_count": int(token_count or 0),
-            "runtime_ms": int(runtime_ms or 0),
-            "unit_count": int(unit_count or 0),
-        }
+        ).filter(
+            MeterEvent.created_at >= period_start,
+            MeterEvent.created_at < period_end,
+        ).all()
+    )
+    entity_counts = aggregate_entity_counts([
+        parse_event_metadata(row.metadata_json or "{}")
+        for row in filtered_rows
+    ])
+    usage_dict = {
+        "period_start": period_start.date().isoformat(),
+        "period_type": "month",
+        "request_count": len(filtered_rows),
+        "token_count": sum(int(row.tokens or 0) for row in filtered_rows),
+        "runtime_ms": sum(int(row.runtime_ms or 0) for row in filtered_rows),
+        "unit_count": sum(int(row.units or 0) for row in filtered_rows),
+    }
     return UsageSummaryResponse(
         workspace_id=workspace.id,
         plan_tier=workspace.plan_tier,
         limits=limits,
         usage=usage_dict,
+        entity_counts=entity_counts,
     )
 
 
@@ -154,9 +174,6 @@ def list_usage_events(
         MeterEvent.created_at < period_end,
     )
 
-    total = query.count()
-    response.headers["X-Total-Count"] = str(total)
-
     sort_column = {
         "created_at": MeterEvent.created_at,
         "units": MeterEvent.units,
@@ -164,7 +181,9 @@ def list_usage_events(
         "runtime_ms": MeterEvent.runtime_ms,
     }[sort]
     query = query.order_by(sort_column.asc() if order == "asc" else sort_column.desc())
-    rows = query.offset(offset).limit(limit).all()
+    rows = _dedupe_usage_rows(query.all())
+    response.headers["X-Total-Count"] = str(len(rows))
+    rows = rows[offset:offset + limit]
     return [
         UsageEventOut(
             id=row.id,
@@ -175,6 +194,7 @@ def list_usage_events(
             status=row.status,
             api_key_id=row.api_key_id,
             request_id=row.request_id,
+            entity_counts=aggregate_entity_counts([parse_event_metadata(row.metadata_json or "{}")]),
             created_at=row.created_at,
         )
         for row in rows

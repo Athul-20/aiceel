@@ -21,6 +21,7 @@ import * as Icons from "./components/Icons";
 
 const MAX_NOTIFICATIONS = 5;
 const NOTIFICATION_TTL_MS = 4500;
+const SIDEBAR_COLLAPSED_KEY = "aiccel_sidebar_collapsed";
 
 function NotificationTray({ notice, error }) {
   const [items, setItems] = useState([]);
@@ -89,6 +90,19 @@ function NotificationTray({ notice, error }) {
 
 function AppContent() {
   const { isLoggedIn, activeView, activeViewMeta, error, notice, activeWorkspace, theme, toggleTheme } = useApp();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+    } catch {}
+  }, [sidebarCollapsed]);
 
   if (!isLoggedIn) {
     return <AuthScreen />;
@@ -119,8 +133,8 @@ function AppContent() {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar />
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((current) => !current)} />
       <main className="main-area">
         <header className="top-bar">
           <div className="top-bar-left">

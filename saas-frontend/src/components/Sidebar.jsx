@@ -23,7 +23,7 @@ const ICON_MAP = {
   docs: Icons.IconDocs,
 };
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [openSections, setOpenSections] = useState(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.title, true]))
@@ -67,8 +67,24 @@ export default function Sidebar() {
     <>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <h1>AICCEL</h1>
-          <p>AI-Accelerated Agentic Library</p>
+          <div className="sidebar-brand-row">
+            <div className="sidebar-brand-copy">
+              <h1>AICCEL</h1>
+              <p>AI-Accelerated Agentic Library</p>
+            </div>
+            <button
+              className="sidebar-collapse-btn"
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-pressed={collapsed}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <span className={`sidebar-collapse-icon ${collapsed ? "collapsed" : ""}`} aria-hidden="true">
+                <Icons.IconChevronDown />
+              </span>
+            </button>
+          </div>
         </div>
 
         <nav className="stagger-children">
@@ -79,6 +95,7 @@ export default function Sidebar() {
                 type="button"
                 onClick={() => toggleSection(group.title)}
                 aria-expanded={openSections[group.title]}
+                title={collapsed ? group.title : undefined}
               >
                 <span className="nav-section-title">{group.title}</span>
                 <span className="nav-section-chevron" aria-hidden="true">
@@ -95,11 +112,12 @@ export default function Sidebar() {
                         key={id}
                         onClick={() => setActiveView(id)}
                         type="button"
+                        title={collapsed ? label : undefined}
                       >
                         <span className="nav-icon">
                           {IconComp ? <IconComp /> : null}
                         </span>
-                        {label}
+                        <span className="nav-label">{label}</span>
                       </button>
                     );
                   })}
@@ -113,9 +131,9 @@ export default function Sidebar() {
           <div className="user-info">
             <span>{user?.email}</span>
           </div>
-          <button className="btn-ghost btn-sm sidebar-logout-btn" type="button" onClick={requestLogout}>
+          <button className="btn-ghost btn-sm sidebar-logout-btn" type="button" onClick={requestLogout} title={collapsed ? "Logout" : undefined}>
             <Icons.IconLogout />
-            Logout
+            <span className="nav-label">Logout</span>
           </button>
         </footer>
       </aside>

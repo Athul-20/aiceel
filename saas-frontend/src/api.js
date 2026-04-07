@@ -253,8 +253,15 @@ export const api = {
     });
   },
 
-  runEngineSecurity: (auth, payload) =>
-    request("/v1/engine/security/process", {
+  runPiiMasking: (auth, payload) =>
+    request("/v1/pii/mask", {
+      method: "POST",
+      ...authOptions(auth),
+      body: payload,
+    }),
+
+  runSentinelAnalyze: (auth, payload) =>
+    request("/v1/sentinel/analyze", {
       method: "POST",
       ...authOptions(auth),
       body: payload,

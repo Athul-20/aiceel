@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -264,9 +265,18 @@ class SensitiveEntity(BaseModel):
     value_preview: str
 
 
+class TokenMetadata(BaseModel):
+    kind: str
+    index: int
+    reversible: bool = True
+    canonical_placeholder: str
+    display_value: str
+
+
 class EngineSecurityProcessRequest(BaseModel):
     text: str = Field(min_length=1, max_length=16000)
     reversible: bool = True
+    token_format: Literal["opaque", "typed", "masked_readable"] = "opaque"
     remove_email: bool = True
     remove_phone: bool = True
     remove_person: bool = True
@@ -283,7 +293,9 @@ class EngineSecurityProcessResponse(BaseModel):
     sensitive_entities: list[SensitiveEntity]
     sanitized_text: str
     tokenized_text: str
+    token_format: Literal["opaque", "typed", "masked_readable"] = "opaque"
     token_map: dict[str, str]
+    token_metadata: dict[str, TokenMetadata] = Field(default_factory=dict)
     generated_at: datetime
 
 
@@ -440,6 +452,7 @@ class UsageSummaryResponse(BaseModel):
     plan_tier: str
     limits: dict[str, int]
     usage: dict[str, int | str]
+    entity_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class UsageEventOut(BaseModel):
@@ -451,6 +464,7 @@ class UsageEventOut(BaseModel):
     status: str
     api_key_id: int | None = None
     request_id: str | None = None
+    entity_counts: dict[str, int] = Field(default_factory=dict)
     created_at: datetime
 
 

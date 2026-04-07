@@ -597,7 +597,7 @@ export function AppProvider({ children }) {
   async function runPiiMasking(text, reversible = true, options = {}) {
     setBusy(true); setError("");
     try {
-      const result = await withBearerRetry((tok) => api.runEngineSecurity(buildFeatureAuth(tok), { text, reversible, ...options }));
+      const result = await withBearerRetry((tok) => api.runPiiMasking(buildFeatureAuth(tok), { text, reversible, ...options }));
       return result;
     } catch (err) { setError(err.message); return null; }
     finally { setBusy(false); }
@@ -642,7 +642,7 @@ export function AppProvider({ children }) {
   async function runJailbreakCheck(text) {
     setBusy(true); setError("");
     try {
-      const result = await withBearerRetry((tok) => api.runEngineSecurity(buildFeatureAuth(tok), { text, reversible: false }));
+      const result = await withBearerRetry((tok) => api.runSentinelAnalyze(buildFeatureAuth(tok), { text, reversible: false }));
       return result;
     } catch (err) { setError(err.message); return null; }
     finally { setBusy(false); }

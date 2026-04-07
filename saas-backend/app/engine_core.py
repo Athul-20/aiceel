@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from collections import defaultdict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -98,6 +99,90 @@ def _preview(value: str) -> str:
     if len(value) <= 6:
         return value[:1] + "***"
     return f"{value[:3]}***{value[-2:]}"
+
+
+def _token_kind(kind: str) -> str:
+    normalized = (kind or "").strip().lower()
+    kind_aliases = {
+        "birthdays": "dob",
+        "bank_accounts": "bank_account",
+        "blood_groups": "blood_group",
+        "emails": "email",
+        "phones": "phone",
+        "persons": "person",
+        "organizations": "organization",
+        "passports": "passport",
+        "pancards": "pancard",
+        "cards": "card",
+        "addresses": "address",
+    }
+    return kind_aliases.get(normalized, normalized)
+
+
+def _typed_placeholder(kind: str, index: int) -> str:
+    token_labels = {
+        "email": "EMAIL",
+        "phone": "PHONE",
+        "person": "PERSON",
+        "organization": "ORGANIZATION",
+        "address": "ADDRESS",
+        "passport": "PASSPORT",
+        "pancard": "PANCARD",
+        "blood_group": "BLOOD_GROUP",
+        "ssn": "SSN",
+        "card": "CARD",
+        "dob": "DOB",
+        "bank_account": "BANK_ACCOUNT",
+    }
+    label = token_labels.get(_token_kind(kind), _token_kind(kind).upper().replace("-", "_"))
+    return f"__AICCEL_{label}_{index}__"
+
+
+def _mask_email_value(value: str) -> str:
+    local, _, domain = value.partition("@")
+    if not domain:
+        return _preview(value)
+    visible_prefix = local[: min(4, len(local))]
+    visible_suffix = local[-1] if len(local) > 5 else ""
+    hidden_count = max(3, len(local) - len(visible_prefix) - len(visible_suffix))
+    masked_local = f"{visible_prefix}{'*' * hidden_count}{visible_suffix}"
+    return f"{masked_local}@{domain}"
+
+
+def _mask_phone_value(value: str) -> str:
+    digit_positions = [index for index, char in enumerate(value) if char.isdigit()]
+    if not digit_positions:
+        return _preview(value)
+    masked_chars = list(value)
+    for offset, position in enumerate(digit_positions):
+        if offset < 2 or offset >= max(0, len(digit_positions) - 2):
+            continue
+        masked_chars[position] = "*"
+    return "".join(masked_chars)
+
+
+def _mask_generic_value(value: str) -> str:
+    if len(value) <= 4:
+        return f"{value[:1]}***"
+    if len(value) <= 8:
+        return f"{value[:2]}{'*' * max(3, len(value) - 3)}{value[-1:]}"
+    return f"{value[:4]}{'*' * max(3, len(value) - 6)}{value[-2:]}"
+
+
+def _masked_readable_value(kind: str, value: str) -> str:
+    token_kind = _token_kind(kind)
+    if token_kind == "email":
+        return _mask_email_value(value)
+    if token_kind == "phone":
+        return _mask_phone_value(value)
+    return _mask_generic_value(value)
+
+
+def _unique_masked_value(kind: str, value: str, existing: Dict[str, str], type_index: int) -> str:
+    candidate = _masked_readable_value(kind, value)
+    if candidate not in existing or existing[candidate] == value:
+        return candidate
+    return f"{candidate}__{_token_kind(kind).upper()}_{type_index}"
 
 
 def security_process_text(text: str, setup: SecuritySetup, reversible: bool, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -209,15 +294,40 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
 
     tokenized_text: str = text
     token_map: Dict[str, str] = {}
+    token_metadata: Dict[str, Dict[str, Any]] = {}
     if setup.reversible_tokenization and reversible:
+        token_format = str(opts.get("token_format", "opaque") or "opaque").strip().lower()
+        if token_format not in {"opaque", "typed", "masked_readable"}:
+            token_format = "opaque"
         token_index = 1
+        type_indexes: Dict[str, int] = defaultdict(int)
         for kind, value in deduped_entities:
             if kind == "semantic":
                 continue
-            token = f"__AICCEL_TOKEN_{token_index}__"
+            public_kind = _token_kind(kind)
+            type_indexes[public_kind] += 1
+            type_index = type_indexes[public_kind]
+            canonical_placeholder = _typed_placeholder(public_kind, type_index)
+            if token_format == "typed":
+                token = canonical_placeholder
+            elif token_format == "masked_readable":
+                token = _unique_masked_value(public_kind, value, token_map, type_index)
+            else:
+                token = f"__AICCEL_TOKEN_{token_index}__"
             tokenized_text = tokenized_text.replace(value, token)
             token_map[token] = value
+            token_metadata[token] = {
+                "kind": public_kind,
+                "index": type_index,
+                "reversible": True,
+                "canonical_placeholder": canonical_placeholder,
+                "display_value": token,
+            }
             token_index += 1
+    else:
+        token_format = str(opts.get("token_format", "opaque") or "opaque").strip().lower()
+        if token_format not in {"opaque", "typed", "masked_readable"}:
+            token_format = "opaque"
 
     sanitized_text: str = tokenized_text if token_map else text
     if not token_map:
@@ -252,7 +362,9 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
         ],
         "sanitized_text": sanitized_text,
         "tokenized_text": tokenized_text,
+        "token_format": token_format,
         "token_map": token_map,
+        "token_metadata": token_metadata,
         "model_detection": model_detection,
         "generated_at": utc_now(),
     }

@@ -41,7 +41,7 @@ def main() -> int:
         headers["X-Workspace-ID"] = workspace_id
 
     request = urllib.request.Request(
-        url=f"{base_url}/v1/engine/security/process",
+        url=f"{base_url}/v1/pii/mask",
         data=json.dumps(payload).encode("utf-8"),
         headers=headers,
         method="POST",
@@ -52,7 +52,7 @@ def main() -> int:
             body = response.read().decode("utf-8")
             data = json.loads(body)
             print(f"HTTP {response.status}")
-            print("Feature: engine.security")
+            print("Feature: pii.masking")
             print(f"Blocked: {data.get('blocked')}")
             print(f"Risk score: {data.get('risk_score')}")
             print("Detected markers:", ", ".join(data.get("detected_markers", [])) or "(none)")

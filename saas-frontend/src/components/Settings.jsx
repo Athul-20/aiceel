@@ -4,6 +4,10 @@ import { Field, FeaturePageHeader, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
 const USAGE_CHART_COLORS = ["#2563eb", "#f59e0b", "#16a34a"];
+const USAGE_TIMEZONES = {
+  IST: { label: "IST", timeZone: "Asia/Kolkata" },
+  UTC: { label: "UTC", timeZone: "UTC" },
+};
 const MONTH_OPTIONS = [
   { value: 1, label: "January" },
   { value: 2, label: "February" },
@@ -18,6 +22,12 @@ const MONTH_OPTIONS = [
   { value: 11, label: "November" },
   { value: 12, label: "December" },
 ];
+const RECENT_WINDOW_OPTIONS = [
+  { value: "24h", label: "Last 24H", durationMs: 24 * 60 * 60 * 1000 },
+  { value: "7d", label: "Last 7D", durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { value: "30d", label: "Last 30D", durationMs: 30 * 24 * 60 * 60 * 1000 },
+  { value: "all", label: "All", durationMs: null },
+];
 
 function titleCase(value) {
   return String(value || "")
@@ -27,93 +37,222 @@ function titleCase(value) {
     .join(" ");
 }
 
-function getUsageCategory(feature) {
-  const raw = String(feature || "");
-  if (raw.startsWith("request:")) {
-    const path = raw.split(" ")[1] || "";
-    const segments = path.split("/").filter(Boolean);
-    const section = segments[1] || segments[0] || "api";
-    return `${titleCase(section)} API`;
-  }
-  return `${titleCase(raw.split(".")[0] || "other")} Features`;
+function formatEntityLabel(kind) {
+  const labels = {
+    email: "Emails",
+    phone: "Phones",
+    person: "People",
+    organization: "Organizations",
+    address: "Addresses",
+    passport: "Passports",
+    pancard: "PAN Cards",
+    blood_group: "Blood Groups",
+    ssn: "SSNs",
+    card: "Cards",
+    dob: "Birth Dates",
+    bank_account: "Bank Accounts",
+  };
+  return labels[kind] || titleCase(kind);
 }
 
-function formatBucketLabel(timestamp, totalSpanMs) {
+function getUsageFeatureMeta(feature) {
+  const raw = String(feature || "");
+  const requestMatch = raw.match(/^request:([A-Z]+)\s+(.+)$/);
+  if (requestMatch) {
+    const [, method, path] = requestMatch;
+    return {
+      key: raw,
+      label: `${method} ${path}`,
+      endpoint: path,
+      technicalLabel: raw,
+    };
+  }
+
+  const known = {
+    "pii.masking": { label: "PII Masking", endpoint: "/v1/pii/mask" },
+    "sentinel.shield": { label: "Sentinel Shield", endpoint: "/v1/sentinel/analyze" },
+    "engine.security": { label: "Removed Shared Security Route", endpoint: "/v1/engine/security/process" },
+    "biomed.masking": { label: "BioMed Masking", endpoint: "/v1/biomed/mask" },
+    "lab.execute": { label: "Sandbox Lab", endpoint: "/v1/lab/execute" },
+    "playground.run": { label: "Playground", endpoint: "/v1/playground/run" },
+    "engine.vault.encrypt": { label: "Vault Encrypt", endpoint: "/v1/engine/security/vault/encrypt" },
+    "engine.vault.decrypt": { label: "Vault Decrypt", endpoint: "/v1/engine/security/vault/decrypt" },
+    "engine.pandora.transform": { label: "Pandora Data Lab", endpoint: "/v1/engine/pandora/transform" },
+  };
+
+  const mapped = known[raw];
+  return {
+    key: raw,
+    label: mapped?.label || titleCase(raw),
+    endpoint: mapped?.endpoint || null,
+    technicalLabel: raw,
+  };
+}
+
+function parseUsageTimestamp(value) {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const normalized = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(value) && !/[zZ]|[+-]\d{2}:\d{2}$/.test(value)
+      ? `${value.replace(" ", "T")}Z`
+      : value;
+    return new Date(normalized).getTime();
+  }
+  return Number.NaN;
+}
+
+function formatUsageTimestampLabel(timestamp, totalSpanMs, timezoneMode) {
   const date = new Date(timestamp);
-  const timeLabel = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const timeZone = USAGE_TIMEZONES[timezoneMode]?.timeZone || USAGE_TIMEZONES.IST.timeZone;
+  const timeLabel = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone });
   if (totalSpanMs >= 24 * 60 * 60 * 1000) {
-    return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${timeLabel}`;
+    return `${date.toLocaleDateString([], { month: "short", day: "numeric", timeZone })} ${timeLabel}`;
   }
   return timeLabel;
 }
 
-function buildTimeSeries(events, keyFn, options = {}) {
-  const { maxSeries = 3, bucketCount = 8 } = options;
+function formatUsageRangeLabel(startTimestamp, endTimestamp, timezoneMode) {
+  const date = new Date(startTimestamp);
+  const timeZone = USAGE_TIMEZONES[timezoneMode]?.timeZone || USAGE_TIMEZONES.IST.timeZone;
+  const startLabel = date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+  const endLabel = new Date(endTimestamp).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+  return `${startLabel} - ${endLabel}`;
+}
+
+function getUsageIntervalMs(recentWindow, totalSpanMs) {
+  if (recentWindow === "24h") return 60 * 60 * 1000;
+  if (recentWindow === "7d") return 12 * 60 * 60 * 1000;
+  if (recentWindow === "30d") return 24 * 60 * 60 * 1000;
+  if (totalSpanMs <= 3 * 24 * 60 * 60 * 1000) return 6 * 60 * 60 * 1000;
+  if (totalSpanMs <= 21 * 24 * 60 * 60 * 1000) return 24 * 60 * 60 * 1000;
+  if (totalSpanMs <= 120 * 24 * 60 * 60 * 1000) return 7 * 24 * 60 * 60 * 1000;
+  return 30 * 24 * 60 * 60 * 1000;
+}
+
+function filterUsageEventsByRecentWindow(events, recentWindow) {
+  const activeWindow = RECENT_WINDOW_OPTIONS.find((option) => option.value === recentWindow);
+  if (!activeWindow || activeWindow.durationMs == null) return events;
+  if (!events.length) return events;
+
+  const latestTimestamp = Math.max(...events.map((event) => event.timestamp));
+  const threshold = latestTimestamp - activeWindow.durationMs;
+  return events.filter((event) => event.timestamp >= threshold);
+}
+
+function buildUsageSeries(events, keyFn, options = {}) {
+  const { maxSeries = 2, timezoneMode = "IST", recentWindow = "30d" } = options;
   const orderedEvents = [...(events || [])]
-    .map((event) => ({ ...event, timestamp: new Date(event.created_at).getTime() }))
+    .map((event) => ({ ...event, timestamp: parseUsageTimestamp(event.created_at) }))
     .filter((event) => Number.isFinite(event.timestamp))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   if (!orderedEvents.length) {
-    return { buckets: [], series: [], maxValue: 0 };
+    return {
+      intervals: [],
+      series: [],
+      minTimestamp: 0,
+      maxTimestamp: 0,
+      maxValue: 0,
+      axisLabels: [],
+      totalEvents: 0,
+      timezoneMode,
+    };
   }
 
   const totals = new Map();
   for (const event of orderedEvents) {
-    const label = keyFn(event);
-    const current = totals.get(label) || { label, units: 0, calls: 0 };
+    const meta = getUsageFeatureMeta(keyFn(event));
+    const current = totals.get(meta.key) || { ...meta, units: 0, calls: 0 };
     current.units += Number(event.units || 0);
     current.calls += 1;
-    totals.set(label, current);
+    totals.set(meta.key, current);
   }
 
   const topLabels = Array.from(totals.values())
-    .sort((a, b) => b.units - a.units || b.calls - a.calls)
+    .sort((a, b) => b.calls - a.calls || b.units - a.units)
     .slice(0, maxSeries)
-    .map((item) => item.label);
+    .map((item) => item.key);
 
   if (!topLabels.length) {
-    return { buckets: [], series: [], maxValue: 0 };
+    return {
+      intervals: [],
+      series: [],
+      minTimestamp: 0,
+      maxTimestamp: 0,
+      maxValue: 0,
+      axisLabels: [],
+      totalEvents: 0,
+      timezoneMode,
+    };
   }
 
-  const firstTimestamp = orderedEvents[0].timestamp;
-  const lastTimestamp = orderedEvents[orderedEvents.length - 1].timestamp;
-  const totalSpanMs = Math.max(lastTimestamp - firstTimestamp, 60 * 1000);
-  const safeBucketCount = Math.min(bucketCount, Math.max(4, orderedEvents.length));
-  const bucketSizeMs = Math.max(Math.ceil(totalSpanMs / safeBucketCount), 60 * 1000);
-  const actualBucketCount = Math.max(1, Math.floor(totalSpanMs / bucketSizeMs) + 1);
-  const bucketValues = Array.from({ length: actualBucketCount }, (_, index) => {
-    const start = firstTimestamp + index * bucketSizeMs;
+  const minTimestamp = orderedEvents[0].timestamp;
+  const maxTimestamp = orderedEvents[orderedEvents.length - 1].timestamp;
+  const totalSpanMs = Math.max(maxTimestamp - minTimestamp, 60 * 60 * 1000);
+  const intervalMs = getUsageIntervalMs(recentWindow, totalSpanMs);
+  const alignedStart = Math.floor(minTimestamp / intervalMs) * intervalMs;
+  const alignedEnd = Math.ceil(maxTimestamp / intervalMs) * intervalMs;
+  const intervalCount = Math.max(1, Math.round((alignedEnd - alignedStart) / intervalMs) + 1);
+  const intervals = Array.from({ length: intervalCount }, (_, index) => {
+    const start = alignedStart + index * intervalMs;
+    const end = start + intervalMs;
     return {
-      key: `${start}`,
-      label: formatBucketLabel(start, totalSpanMs),
-      values: new Map(topLabels.map((item) => [item, 0])),
+      key: `${start}-${end}`,
+      start,
+      end,
+      label: formatUsageTimestampLabel(start, totalSpanMs, timezoneMode),
+      rangeLabel: formatUsageRangeLabel(start, end, timezoneMode),
+      values: new Map(topLabels.map((item) => [item, { calls: 0, units: 0 }])),
     };
   });
 
   for (const event of orderedEvents) {
     const label = keyFn(event);
     if (!topLabels.includes(label)) continue;
-    const bucketIndex = Math.min(
-      bucketValues.length - 1,
-      Math.floor((event.timestamp - firstTimestamp) / bucketSizeMs)
-    );
-    const bucket = bucketValues[bucketIndex];
-    bucket.values.set(label, (bucket.values.get(label) || 0) + Number(event.units || 0));
+    const index = Math.min(intervals.length - 1, Math.max(0, Math.floor((event.timestamp - alignedStart) / intervalMs)));
+    const current = intervals[index].values.get(label) || { calls: 0, units: 0 };
+    intervals[index].values.set(label, {
+      calls: current.calls + 1,
+      units: current.units + Number(event.units || 0),
+    });
   }
 
   const series = topLabels.map((label, index) => ({
-    label,
+    key: label,
+    label: totals.get(label)?.label || label,
+    endpoint: totals.get(label)?.endpoint || null,
+    technicalLabel: totals.get(label)?.technicalLabel || label,
     color: USAGE_CHART_COLORS[index % USAGE_CHART_COLORS.length],
     totalUnits: totals.get(label)?.units || 0,
-    values: bucketValues.map((bucket) => bucket.values.get(label) || 0),
+    totalCalls: totals.get(label)?.calls || 0,
+    values: intervals.map((interval) => interval.values.get(label)?.calls || 0),
+    unitValues: intervals.map((interval) => interval.values.get(label)?.units || 0),
   }));
   const maxValue = Math.max(1, ...series.flatMap((item) => item.values));
+  const axisIndexes = Array.from(new Set([0, Math.floor((intervals.length - 1) / 2), intervals.length - 1]));
 
   return {
-    buckets: bucketValues.map(({ key, label }) => ({ key, label })),
+    intervals: intervals.map(({ key, start, end, label, rangeLabel }) => ({ key, start, end, label, rangeLabel })),
     series,
+    minTimestamp: alignedStart,
+    maxTimestamp: alignedEnd || alignedStart + intervalMs,
     maxValue,
+    axisLabels: axisIndexes.map((index) => ({
+      key: `${intervals[index].key}-axis`,
+      label: intervals[index].label,
+    })),
+    totalEvents: orderedEvents.length,
+    timezoneMode,
   };
 }
 
@@ -123,12 +262,12 @@ function UsageLineChart({ title, subtitle, data }) {
 
   const visibleSeries = useMemo(
     () => (selectedLabels.length
-      ? data.series.filter((series) => selectedLabels.includes(series.label))
+      ? data.series.filter((series) => selectedLabels.includes(series.key))
       : data.series),
     [data.series, selectedLabels]
   );
 
-  if (!data.series.length || !data.buckets.length) {
+  if (!data.series.length || !data.intervals.length) {
     return (
       <section className="usage-graph-card">
         <div className="card-head">
@@ -148,18 +287,51 @@ function UsageLineChart({ title, subtitle, data }) {
   const chartWidth = width - paddingX * 2;
   const chartHeight = height - paddingTop - paddingBottom;
   const maxValue = Math.max(1, ...visibleSeries.flatMap((series) => series.values));
-  const xStep = data.buckets.length > 1 ? chartWidth / (data.buckets.length - 1) : 0;
-  const axisIndexes = Array.from(new Set([0, Math.floor((data.buckets.length - 1) / 2), data.buckets.length - 1]));
-  const safeHoveredIndex = hoveredIndex == null ? data.buckets.length - 1 : hoveredIndex;
-  const hoverX = paddingX + (data.buckets.length === 1 ? chartWidth / 2 : safeHoveredIndex * xStep);
+  const stepWidth = data.intervals.length > 1 ? chartWidth / (data.intervals.length - 1) : chartWidth;
+  const safeHoveredIndex = hoveredIndex == null ? data.intervals.length - 1 : hoveredIndex;
+  const hoverX = data.intervals.length > 1 ? paddingX + safeHoveredIndex * stepWidth : paddingX + chartWidth / 2;
   const tooltipLeft = Math.min(92, Math.max(8, (hoverX / width) * 100));
   const tooltipValues = visibleSeries
     .map((series) => ({
       label: series.label,
+      endpoint: series.endpoint,
+      technicalLabel: series.technicalLabel,
       color: series.color,
-      units: series.values[safeHoveredIndex] || 0,
+      calls: series.values[safeHoveredIndex] || 0,
+      units: series.unitValues[safeHoveredIndex] || 0,
     }))
-    .sort((a, b) => b.units - a.units);
+    .filter((item) => item.calls > 0)
+    .sort((a, b) => b.calls - a.calls || b.units - a.units);
+
+  function getPoint(index, value) {
+    const x = data.intervals.length > 1 ? paddingX + index * stepWidth : paddingX + chartWidth / 2;
+    const y = paddingTop + chartHeight - (value / maxValue) * chartHeight;
+    return { x, y };
+  }
+
+  function buildSmoothPath(values) {
+    const points = values.map((value, index) => ({ ...getPoint(index, value), value }));
+
+    if (!points.length) return "";
+    if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+    if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+
+    let path = `M ${points[0].x} ${points[0].y}`;
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const previous = points[index - 1] || points[index];
+      const current = points[index];
+      const next = points[index + 1];
+      const following = points[index + 2] || next;
+
+      const control1X = current.x + (next.x - previous.x) / 6;
+      const control1Y = current.y + (next.y - previous.y) / 6;
+      const control2X = next.x - (following.x - current.x) / 6;
+      const control2Y = next.y - (following.y - current.y) / 6;
+
+      path += ` C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${next.x} ${next.y}`;
+    }
+    return path;
+  }
 
   function toggleSeries(label) {
     setSelectedLabels((current) => (
@@ -178,27 +350,36 @@ function UsageLineChart({ title, subtitle, data }) {
       <div className="usage-line-legend">
         {data.series.map((series) => (
           <button
-            className={`usage-line-legend-item ${!selectedLabels.length || selectedLabels.includes(series.label) ? "active" : "muted"}`}
-            key={series.label}
+            className={`usage-line-legend-item ${!selectedLabels.length || selectedLabels.includes(series.key) ? "active" : "muted"}`}
+            key={series.key}
             type="button"
-            onClick={() => toggleSeries(series.label)}
+            onClick={() => toggleSeries(series.key)}
           >
             <span className="usage-line-swatch" style={{ background: series.color }} />
-            <strong title={series.label}>{series.label}</strong>
-            <span>{series.totalUnits}u</span>
+            <strong title={series.technicalLabel}>{series.label}</strong>
+            <span>{series.totalCalls} calls</span>
           </button>
         ))}
       </div>
       <div className="usage-line-shell" onMouseLeave={() => setHoveredIndex(null)}>
         {hoveredIndex != null ? (
           <div className="usage-line-tooltip" style={{ left: `${tooltipLeft}%` }}>
-            <strong>{data.buckets[safeHoveredIndex]?.label}</strong>
-            {tooltipValues.map((item) => (
-              <span key={`${title}-${item.label}`}>
+            <strong>{data.intervals[safeHoveredIndex]?.rangeLabel || data.intervals[safeHoveredIndex]?.label}</strong>
+            {tooltipValues.length ? tooltipValues.map((item) => (
+              <span key={`${title}-${item.technicalLabel}`}>
                 <i style={{ background: item.color }} />
-                {item.label}: {item.units}u
+                {item.label}: {item.calls} calls | {item.units}u
               </span>
-            ))}
+            )) : (
+              <span>No calls in this interval</span>
+            )}
+            {tooltipValues.length ? tooltipValues.map((item) => (
+              item.endpoint ? (
+                <span className="usage-line-tooltip-endpoint" key={`${title}-${item.technicalLabel}-endpoint`}>
+                  Endpoint: {item.endpoint}
+                </span>
+              ) : null
+            )) : null}
           </div>
         ) : null}
         <svg
@@ -220,47 +401,33 @@ function UsageLineChart({ title, subtitle, data }) {
               y2={paddingTop + chartHeight}
             />
           ) : null}
-          {visibleSeries.map((series) => {
-            const points = series.values
-              .map((value, index) => {
-                const x = paddingX + (data.buckets.length === 1 ? chartWidth / 2 : index * xStep);
-                const y = paddingTop + chartHeight - (value / maxValue) * chartHeight;
-                return `${x},${y}`;
-              })
-              .join(" ");
-
-            return (
-              <g key={series.label}>
-                <polyline className="usage-line-path" fill="none" points={points} stroke={series.color} />
-                {series.values.map((value, index) => {
-                  const x = paddingX + (data.buckets.length === 1 ? chartWidth / 2 : index * xStep);
-                  const y = paddingTop + chartHeight - (value / maxValue) * chartHeight;
-                  return (
-                    <circle
-                      className={`usage-line-dot ${hoveredIndex === index ? "is-active" : ""}`}
-                      key={`${series.label}-${index}`}
-                      cx={x}
-                      cy={y}
-                      r={hoveredIndex === index ? "4.5" : "3.5"}
-                      fill={series.color}
-                    />
-                  );
-                })}
-              </g>
-            );
-          })}
-          {data.buckets.map((bucket, index) => {
-            const widthPerBucket = data.buckets.length === 1 ? chartWidth : chartWidth / data.buckets.length;
-            const x = data.buckets.length === 1
-              ? paddingX
-              : paddingX + index * xStep - widthPerBucket / 2;
+          {visibleSeries.map((series) => (
+            <g key={series.key}>
+              <path className="usage-line-path" fill="none" d={buildSmoothPath(series.values)} stroke={series.color} />
+              {hoveredIndex != null && series.values[safeHoveredIndex] > 0 ? (() => {
+                const { x, y } = getPoint(safeHoveredIndex, series.values[safeHoveredIndex]);
+                return (
+                  <circle
+                    className="usage-line-dot is-active"
+                    cx={x}
+                    cy={y}
+                    r="4.5"
+                    fill={series.color}
+                  />
+                );
+              })() : null}
+            </g>
+          ))}
+          {data.intervals.map((interval, index) => {
+            const hitWidth = data.intervals.length > 1 ? Math.max(18, stepWidth) : chartWidth;
+            const x = (data.intervals.length > 1 ? paddingX + index * stepWidth : paddingX + chartWidth / 2) - hitWidth / 2;
             return (
               <rect
-                key={`${bucket.key}-hit`}
+                key={`${interval.key}-hit`}
                 className="usage-line-hitbox"
-                x={Math.max(paddingX, x)}
+                x={x}
                 y={paddingTop}
-                width={Math.max(18, widthPerBucket)}
+                width={hitWidth}
                 height={chartHeight}
                 fill="transparent"
                 onMouseEnter={() => setHoveredIndex(index)}
@@ -269,8 +436,8 @@ function UsageLineChart({ title, subtitle, data }) {
           })}
         </svg>
         <div className="usage-line-axis">
-          {axisIndexes.map((index) => (
-            <span key={`${data.buckets[index].key}-axis`}>{data.buckets[index].label}</span>
+          {data.axisLabels.map((item) => (
+            <span key={item.key}>{item.label}</span>
           ))}
         </div>
       </div>
@@ -284,7 +451,8 @@ export default function Settings() {
   const [pendingRevokeKey, setPendingRevokeKey] = useState(null);
   const [revokeConfirmationText, setRevokeConfirmationText] = useState("");
   const [usageSource, setUsageSource] = useState("workspace");
-  const [usageChartMode, setUsageChartMode] = useState("endpoint");
+  const [usageTimezone, setUsageTimezone] = useState("IST");
+  const [usageRecentWindow, setUsageRecentWindow] = useState("30d");
   const [usageMonth, setUsageMonth] = useState(currentMonth);
   const [usageYear, setUsageYear] = useState(currentYear);
   const [selectedUsageApiKeyId, setSelectedUsageApiKeyId] = useState("all");
@@ -301,41 +469,54 @@ export default function Settings() {
     workspaces, activeWorkspace, workspaceName, setWorkspaceName, workspaceMembers,
     memberEmail, setMemberEmail, memberRole, setMemberRole, createWorkspace, switchWorkspace, addWorkspaceMember // Workspaces
   } = useApp();
-  const orderedUsageEvents = [...(scopedUsageEvents || [])].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
   const revokeTextMatches = useMemo(() => revokeConfirmationText.trim() === "REVOKE", [revokeConfirmationText]);
   const selectedUsageApiKey = useMemo(
     () => apiKeys.find((item) => String(item.id) === String(selectedUsageApiKeyId)) || null,
     [apiKeys, selectedUsageApiKeyId]
   );
-  const endpointUsage = useMemo(
-    () => buildTimeSeries(orderedUsageEvents, (event) => event.feature),
-    [orderedUsageEvents]
+  const recentUsageEvents = useMemo(
+    () => filterUsageEventsByRecentWindow(
+      [...(scopedUsageEvents || [])]
+        .map((event) => ({ ...event, timestamp: parseUsageTimestamp(event.created_at) }))
+        .filter((event) => Number.isFinite(event.timestamp))
+        .sort((a, b) => a.timestamp - b.timestamp),
+      usageRecentWindow
+    ),
+    [scopedUsageEvents, usageRecentWindow]
   );
-  const categoryUsage = useMemo(
-    () => buildTimeSeries(orderedUsageEvents, (event) => getUsageCategory(event.feature)),
-    [orderedUsageEvents]
+  const endpointUsage = useMemo(
+    () => buildUsageSeries(
+      recentUsageEvents.filter((event) => !String(event.feature || "").startsWith("request:")),
+      (event) => event.feature,
+      { timezoneMode: usageTimezone, recentWindow: usageRecentWindow }
+    ),
+    [recentUsageEvents, usageTimezone, usageRecentWindow]
   );
   const usageYearOptions = useMemo(
     () => Array.from({ length: 6 }, (_, index) => currentYear - index),
     [currentYear]
   );
-  const activeUsageChart = usageChartMode === "endpoint"
-    ? {
-        title: "By Endpoint",
-        subtitle: "Billed units over time for the busiest recent endpoints.",
-        data: endpointUsage,
-      }
-    : {
-        title: "By Category",
-        subtitle: "Recent traffic patterns grouped by service area.",
-        data: categoryUsage,
-      };
+  const selectedMonthLabel = useMemo(
+    () => MONTH_OPTIONS.find((month) => month.value === usageMonth)?.label || "Selected month",
+    [usageMonth]
+  );
+  const selectedRecentWindowLabel = useMemo(
+    () => RECENT_WINDOW_OPTIONS.find((option) => option.value === usageRecentWindow)?.label || "All",
+    [usageRecentWindow]
+  );
   const selectedPeriodLimit = scopedUsageSummary?.limits?.monthly_units ?? quotaStatus?.limit_units ?? null;
   const selectedPeriodRemaining = selectedPeriodLimit != null
     ? Math.max(0, Number(selectedPeriodLimit) - Number(scopedUsageSummary?.usage?.unit_count || 0))
     : null;
+  const entityUsageStats = useMemo(
+    () => Object.entries(scopedUsageSummary?.entity_counts || {})
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+    [scopedUsageSummary]
+  );
+  const totalDetectedEntities = useMemo(
+    () => entityUsageStats.reduce((sum, [, count]) => sum + Number(count || 0), 0),
+    [entityUsageStats]
+  );
 
   useEffect(() => {
     if (!pendingRevokeKey) return undefined;
@@ -494,7 +675,7 @@ export default function Settings() {
           <section className="card usage-summary-card">
             <div className="card-head">
               <h3>Monthly Aggregation</h3>
-              <p>Current billing period usage.</p>
+              <p>Usage totals for {selectedMonthLabel} {usageYear}.</p>
             </div>
             <div className="usage-filter-bar">
               <div className="auth-switch usage-source-switch">
@@ -513,26 +694,6 @@ export default function Settings() {
                   API
                 </button>
               </div>
-              <div className="usage-period-filters">
-                <select
-                  className="usage-filter-select"
-                  value={usageMonth}
-                  onChange={(event) => setUsageMonth(Number(event.target.value))}
-                >
-                  {MONTH_OPTIONS.map((month) => (
-                    <option key={month.value} value={month.value}>{month.label}</option>
-                  ))}
-                </select>
-                <select
-                  className="usage-filter-select"
-                  value={usageYear}
-                  onChange={(event) => setUsageYear(Number(event.target.value))}
-                >
-                  {usageYearOptions.map((year) => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
               {usageSource === "api" ? (
                 <select
                   className="usage-key-select"
@@ -547,45 +708,94 @@ export default function Settings() {
               ) : null}
             </div>
             {scopedUsageSummary ? (
-              <div className="stats-row">
-                <article className="stat-card"><span>Total Units</span><strong>{scopedUsageSummary.usage.unit_count}</strong></article>
-                <article className="stat-card"><span>Tokens Used</span><strong>{scopedUsageSummary.usage.token_count}</strong></article>
-                <article className="stat-card"><span>Requests Executed</span><strong>{scopedUsageSummary.usage.request_count}</strong></article>
-                <article className="stat-card"><span>Tracked Scope</span><strong>{usageSource === "workspace" ? "Workspace" : (selectedUsageApiKey?.name || "All API Keys")}</strong></article>
-                <article className="stat-card"><span>Monthly Limit</span><strong>{selectedPeriodLimit?.toLocaleString?.() ?? "N/A"}</strong></article>
-                <article className="stat-card"><span>Remaining Units</span><strong>{selectedPeriodRemaining?.toLocaleString?.() ?? "N/A"}</strong></article>
-              </div>
+              <>
+                <div className="stats-row">
+                  <article className="stat-card"><span>Total Units</span><strong>{scopedUsageSummary.usage.unit_count}</strong></article>
+                  <article className="stat-card"><span>Tokens Used</span><strong>{scopedUsageSummary.usage.token_count}</strong></article>
+                  <article className="stat-card"><span>Requests Executed</span><strong>{scopedUsageSummary.usage.request_count}</strong></article>
+                  <article className="stat-card"><span>Tracked Scope</span><strong>{usageSource === "workspace" ? "Workspace" : (selectedUsageApiKey?.name || "All API Keys")}</strong></article>
+                  <article className="stat-card"><span>Monthly Limit</span><strong>{selectedPeriodLimit?.toLocaleString?.() ?? "N/A"}</strong></article>
+                  <article className="stat-card"><span>Remaining Units</span><strong>{selectedPeriodRemaining?.toLocaleString?.() ?? "N/A"}</strong></article>
+                </div>
+                <div className="card-head usage-entity-head">
+                  <h3>Detected Entity Stats</h3>
+                  <p>Aggregate-only counts for the selected period and scope. No raw sensitive values are stored in usage analytics.</p>
+                </div>
+                {entityUsageStats.length ? (
+                  <div className="stats-row usage-entity-stats">
+                    <article className="stat-card">
+                      <span>Total Entities</span>
+                      <strong>{totalDetectedEntities}</strong>
+                    </article>
+                    {entityUsageStats.map(([kind, count]) => (
+                      <article className="stat-card" key={kind}>
+                        <span>{formatEntityLabel(kind)}</span>
+                        <strong>{count}</strong>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted usage-entity-empty">No aggregate entity counts recorded for this selection yet.</p>
+                )}
+              </>
             ) : <p className="muted">{usageLoading ? "Loading usage statistics..." : "No usage statistics available."}</p>}
           </section>
           <section className="card usage-events-card">
             <div className="card-head usage-events-head">
               <div>
                 <h3>Recent Traffic</h3>
-                <p>{usageLoading ? "Loading..." : `${orderedUsageEvents.length} events`}</p>
+                <p>{usageLoading ? "Loading..." : `${recentUsageEvents.length} events • ${selectedRecentWindowLabel} • ${usageTimezone}`}</p>
               </div>
-              <div className="auth-switch usage-chart-switch">
-                <button
-                  className={usageChartMode === "endpoint" ? "active" : ""}
-                  type="button"
-                  onClick={() => setUsageChartMode("endpoint")}
-                >
-                  Endpoint
-                </button>
-                <button
-                  className={usageChartMode === "category" ? "active" : ""}
-                  type="button"
-                  onClick={() => setUsageChartMode("category")}
-                >
-                  Category
-                </button>
+              <div className="usage-head-controls">
+                <div className="usage-period-filters usage-head-selects">
+                  <select
+                    className="usage-filter-select"
+                    value={usageMonth}
+                    onChange={(event) => setUsageMonth(Number(event.target.value))}
+                  >
+                    {MONTH_OPTIONS.map((month) => (
+                      <option key={month.value} value={month.value}>{month.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="usage-filter-select"
+                    value={usageYear}
+                    onChange={(event) => setUsageYear(Number(event.target.value))}
+                  >
+                    {usageYearOptions.map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="usage-filter-select usage-recent-filter"
+                    value={usageRecentWindow}
+                    onChange={(event) => setUsageRecentWindow(event.target.value)}
+                  >
+                    {RECENT_WINDOW_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="auth-switch usage-timezone-switch">
+                  {Object.keys(USAGE_TIMEZONES).map((zone) => (
+                    <button
+                      key={zone}
+                      className={usageTimezone === zone ? "active" : ""}
+                      type="button"
+                      onClick={() => setUsageTimezone(zone)}
+                    >
+                      {zone}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            {orderedUsageEvents.length ? (
+            {recentUsageEvents.length ? (
               <div className="usage-graph-panel">
                 <UsageLineChart
-                  title={activeUsageChart.title}
-                  subtitle={activeUsageChart.subtitle}
-                  data={activeUsageChart.data}
+                  title="By Endpoint"
+                  subtitle="Calls per time interval for the busiest recent endpoints."
+                  data={endpointUsage}
                 />
               </div>
             ) : !usageLoading ? (
