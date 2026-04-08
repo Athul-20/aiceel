@@ -3,10 +3,10 @@ import { useApp } from "../context/AppContext";
 import { Field, FeaturePageHeader, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
-const USAGE_CHART_COLORS = ["#2563eb", "#f59e0b", "#16a34a"];
+const USAGE_CHART_BASE_COLORS = ["#2563eb", "#f59e0b", "#16a34a", "#ef4444", "#8b5cf6", "#06b6d4", "#84cc16", "#f97316", "#ec4899", "#14b8a6"];
 const USAGE_TIMEZONES = {
-  IST: { label: "IST", timeZone: "Asia/Kolkata" },
-  UTC: { label: "UTC", timeZone: "UTC" },
+  IST: { label: "IST", timeZone: "Asia/Kolkata", offsetMinutes: 330 },
+  UTC: { label: "UTC", timeZone: "UTC", offsetMinutes: 0 },
 };
 const MONTH_OPTIONS = [
   { value: 1, label: "January" },
@@ -35,6 +35,16 @@ function titleCase(value) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getUsageChartColor(index, total) {
+  if (index < USAGE_CHART_BASE_COLORS.length) {
+    return USAGE_CHART_BASE_COLORS[index];
+  }
+  const hue = Math.round((index * 137.508) % 360);
+  const saturation = total > 6 ? 78 : 72;
+  const lightness = 56;
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 
 function formatEntityLabel(kind) {
@@ -101,38 +111,66 @@ function parseUsageTimestamp(value) {
   return Number.NaN;
 }
 
-function formatUsageTimestampLabel(timestamp, totalSpanMs, timezoneMode) {
+function formatUsageTimestampLabel(timestamp, totalSpanMs, intervalMs, timezoneMode) {
   const date = new Date(timestamp);
   const timeZone = USAGE_TIMEZONES[timezoneMode]?.timeZone || USAGE_TIMEZONES.IST.timeZone;
   const timeLabel = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone });
+  const dayLabel = date.toLocaleDateString([], { month: "short", day: "numeric", timeZone });
+  if (intervalMs >= 24 * 60 * 60 * 1000) {
+    return dayLabel;
+  }
   if (totalSpanMs >= 24 * 60 * 60 * 1000) {
-    return `${date.toLocaleDateString([], { month: "short", day: "numeric", timeZone })} ${timeLabel}`;
+    return `${dayLabel} ${timeLabel}`;
   }
   return timeLabel;
 }
 
 function formatUsageRangeLabel(startTimestamp, endTimestamp, timezoneMode) {
-  const date = new Date(startTimestamp);
+  const startDate = new Date(startTimestamp);
+  const endDate = new Date(endTimestamp);
   const timeZone = USAGE_TIMEZONES[timezoneMode]?.timeZone || USAGE_TIMEZONES.IST.timeZone;
-  const startLabel = date.toLocaleString([], {
+  const startLabel = startDate.toLocaleString([], {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     timeZone,
   });
-  const endLabel = new Date(endTimestamp).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone,
-  });
+  const sameDay = startDate.toLocaleDateString([], { year: "numeric", month: "2-digit", day: "2-digit", timeZone })
+    === endDate.toLocaleDateString([], { year: "numeric", month: "2-digit", day: "2-digit", timeZone });
+  const endLabel = sameDay
+    ? endDate.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone,
+      })
+    : endDate.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone,
+      });
   return `${startLabel} - ${endLabel}`;
 }
 
 function getUsageIntervalMs(recentWindow, totalSpanMs) {
-  if (recentWindow === "24h") return 60 * 60 * 1000;
-  if (recentWindow === "7d") return 12 * 60 * 60 * 1000;
-  if (recentWindow === "30d") return 24 * 60 * 60 * 1000;
+  if (recentWindow === "24h") {
+    if (totalSpanMs <= 6 * 60 * 60 * 1000) return 30 * 60 * 1000;
+    if (totalSpanMs <= 12 * 60 * 60 * 1000) return 60 * 60 * 1000;
+    return 2 * 60 * 60 * 1000;
+  }
+  if (recentWindow === "7d") {
+    if (totalSpanMs <= 24 * 60 * 60 * 1000) return 2 * 60 * 60 * 1000;
+    if (totalSpanMs <= 3 * 24 * 60 * 60 * 1000) return 6 * 60 * 60 * 1000;
+    return 12 * 60 * 60 * 1000;
+  }
+  if (recentWindow === "30d") {
+    if (totalSpanMs <= 24 * 60 * 60 * 1000) return 2 * 60 * 60 * 1000;
+    if (totalSpanMs <= 3 * 24 * 60 * 60 * 1000) return 6 * 60 * 60 * 1000;
+    if (totalSpanMs <= 10 * 24 * 60 * 60 * 1000) return 12 * 60 * 60 * 1000;
+    return 24 * 60 * 60 * 1000;
+  }
   if (totalSpanMs <= 3 * 24 * 60 * 60 * 1000) return 6 * 60 * 60 * 1000;
   if (totalSpanMs <= 21 * 24 * 60 * 60 * 1000) return 24 * 60 * 60 * 1000;
   if (totalSpanMs <= 120 * 24 * 60 * 60 * 1000) return 7 * 24 * 60 * 60 * 1000;
@@ -150,7 +188,7 @@ function filterUsageEventsByRecentWindow(events, recentWindow) {
 }
 
 function buildUsageSeries(events, keyFn, options = {}) {
-  const { maxSeries = 2, timezoneMode = "IST", recentWindow = "30d" } = options;
+  const { maxSeries = 4, timezoneMode = "IST", recentWindow = "30d" } = options;
   const orderedEvents = [...(events || [])]
     .map((event) => ({ ...event, timestamp: parseUsageTimestamp(event.created_at) }))
     .filter((event) => Number.isFinite(event.timestamp))
@@ -200,8 +238,9 @@ function buildUsageSeries(events, keyFn, options = {}) {
   const maxTimestamp = orderedEvents[orderedEvents.length - 1].timestamp;
   const totalSpanMs = Math.max(maxTimestamp - minTimestamp, 60 * 60 * 1000);
   const intervalMs = getUsageIntervalMs(recentWindow, totalSpanMs);
-  const alignedStart = Math.floor(minTimestamp / intervalMs) * intervalMs;
-  const alignedEnd = Math.ceil(maxTimestamp / intervalMs) * intervalMs;
+  const offsetMs = (USAGE_TIMEZONES[timezoneMode]?.offsetMinutes || 0) * 60 * 1000;
+  const alignedStart = Math.floor((minTimestamp + offsetMs) / intervalMs) * intervalMs - offsetMs;
+  const alignedEnd = Math.ceil((maxTimestamp + offsetMs) / intervalMs) * intervalMs - offsetMs;
   const intervalCount = Math.max(1, Math.round((alignedEnd - alignedStart) / intervalMs) + 1);
   const intervals = Array.from({ length: intervalCount }, (_, index) => {
     const start = alignedStart + index * intervalMs;
@@ -210,7 +249,7 @@ function buildUsageSeries(events, keyFn, options = {}) {
       key: `${start}-${end}`,
       start,
       end,
-      label: formatUsageTimestampLabel(start, totalSpanMs, timezoneMode),
+      label: formatUsageTimestampLabel(start, totalSpanMs, intervalMs, timezoneMode),
       rangeLabel: formatUsageRangeLabel(start, end, timezoneMode),
       values: new Map(topLabels.map((item) => [item, { calls: 0, units: 0 }])),
     };
@@ -232,7 +271,7 @@ function buildUsageSeries(events, keyFn, options = {}) {
     label: totals.get(label)?.label || label,
     endpoint: totals.get(label)?.endpoint || null,
     technicalLabel: totals.get(label)?.technicalLabel || label,
-    color: USAGE_CHART_COLORS[index % USAGE_CHART_COLORS.length],
+    color: getUsageChartColor(index, topLabels.length),
     totalUnits: totals.get(label)?.units || 0,
     totalCalls: totals.get(label)?.calls || 0,
     values: intervals.map((interval) => interval.values.get(label)?.calls || 0),
@@ -450,7 +489,7 @@ export default function Settings() {
   const currentYear = new Date().getFullYear();
   const [pendingRevokeKey, setPendingRevokeKey] = useState(null);
   const [revokeConfirmationText, setRevokeConfirmationText] = useState("");
-  const [usageSource, setUsageSource] = useState("workspace");
+  const [usageSource, setUsageSource] = useState("api");
   const [usageTimezone, setUsageTimezone] = useState("IST");
   const [usageRecentWindow, setUsageRecentWindow] = useState("30d");
   const [usageMonth, setUsageMonth] = useState(currentMonth);
@@ -486,7 +525,10 @@ export default function Settings() {
   );
   const endpointUsage = useMemo(
     () => buildUsageSeries(
-      recentUsageEvents.filter((event) => !String(event.feature || "").startsWith("request:")),
+      recentUsageEvents.filter((event) => {
+        const feature = String(event.feature || "");
+        return !feature.startsWith("request:") && feature !== "engine.security";
+      }),
       (event) => event.feature,
       { timezoneMode: usageTimezone, recentWindow: usageRecentWindow }
     ),
