@@ -7,6 +7,7 @@ import json
 import os
 import random
 import re
+import string
 import uuid
 import httpx
 from urllib import parse as url_parse
@@ -106,6 +107,22 @@ def _preview(value: str) -> str:
     if len(value) <= 6:
         return value[:1] + "***"
     return f"{value[:3]}***{value[-2:]}"
+
+def restore_sensitive_data(text: str, token_map: Dict[str, str]) -> str:
+    """
+    Restores original sensitive values from semantic pseudonyms.
+    Sorts by token length descending to prevent partial replacement collisions.
+    """
+    if not text or not token_map:
+        return text
+        
+    unmasked_text = text
+    for token, original_value in sorted(token_map.items(), key=lambda x: len(x[0]), reverse=True):
+        if not isinstance(original_value, str):
+            original_value = str(original_value)
+        unmasked_text = unmasked_text.replace(token, original_value)
+        
+    return unmasked_text
 
 
 def security_process_text(text: str, setup: SecuritySetup, reversible: bool, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -217,15 +234,37 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
 
     tokenized_text: str = text
     token_map: Dict[str, str] = {}
+    
     if setup.reversible_tokenization and reversible:
-        token_index = 1
+        type_counters: Dict[str, int] = {}
+        
+        def get_alpha_id(count: int) -> str:
+            """Generates A, B, C... Z, AA, AB..."""
+            if count < 26:
+                return string.ascii_uppercase[count]
+            return f"{string.ascii_uppercase[(count // 26) - 1]}{string.ascii_uppercase[count % 26]}"
+
         for kind, value in deduped_entities:
             if kind == "semantic":
                 continue
-            token = f"__AICCEL_TOKEN_{token_index}__"
-            tokenized_text = tokenized_text.replace(value, token)
-            token_map[token] = value
-            token_index += 1
+                
+            count = type_counters.get(kind, 0)
+            
+            # Format the kind nicely (e.g., "bank_account" -> "BankAccount")
+            semantic_label = kind.replace("_", " ").title().replace(" ", "")
+            
+            # Use alphabetical IDs for proper nouns, numeric for data/IDs
+            if kind in ["person", "organization", "address"]:
+                pseudonym = f"[{semantic_label}_{get_alpha_id(count)}]"
+            else:
+                pseudonym = f"[{semantic_label}_{count + 1}]"
+                
+            # Replace the real value with the pseudonym
+            tokenized_text = tokenized_text.replace(value, pseudonym)
+            # Map the pseudonym back to the original value for later restoration
+            token_map[pseudonym] = value
+            
+            type_counters[kind] = count + 1
 
     sanitized_text: str = tokenized_text if token_map else text
     if not token_map:

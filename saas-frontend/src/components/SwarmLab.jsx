@@ -91,12 +91,38 @@ export default function SwarmLab() {
               <div style={{ marginTop: "1rem" }}>
                 <p className="muted" style={{ marginBottom: "0.5rem" }}>Execution Stages:</p>
                 <div className="sublist">
-                  {swarmResult.stages?.map((stage, i) => (
-                    <div className="sublist-item" key={i}>
-                      <span className="entity-type" style={{ fontSize: "0.7rem", marginRight: "0.5rem" }}>STEP {i+1}</span>
-                      <span style={{ fontSize: "0.85rem" }}>{stage}</span>
-                    </div>
-                  ))}
+                  {swarmResult.stages?.map((stage, i) => {
+                    const isCritical = stage.includes("CRITICAL:");
+                    const isWarning = stage.includes("WARNING:");
+                    return (
+                      <div 
+                        className="sublist-item" 
+                        key={i}
+                        style={isCritical ? {
+                          background: "rgba(255,59,48,0.08)",
+                          borderLeft: "3px solid var(--red)",
+                          padding: "0.6rem 0.75rem",
+                        } : isWarning ? {
+                          background: "rgba(255,149,0,0.08)",
+                          borderLeft: "3px solid var(--orange)",
+                          padding: "0.6rem 0.75rem",
+                        } : {}}
+                      >
+                        <span className="entity-type" style={{ 
+                          fontSize: "0.7rem", 
+                          marginRight: "0.5rem",
+                          color: isCritical ? "var(--red)" : isWarning ? "var(--orange)" : undefined,
+                        }}>
+                          {isCritical ? "BREACH" : isWarning ? "ALERT" : `STEP ${i+1}`}
+                        </span>
+                        <span style={{ 
+                          fontSize: "0.85rem",
+                          fontWeight: isCritical || isWarning ? 600 : 400,
+                          color: isCritical ? "var(--red)" : isWarning ? "var(--orange)" : undefined,
+                        }}>{stage}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>

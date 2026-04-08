@@ -25,6 +25,7 @@ from app.engine_core import (
     load_platform_setup,
     observability_trace,
     orchestration_run,
+    restore_sensitive_data,
     runtime_execute,
     security_process_text,
     simulate_provider_completion,
@@ -228,6 +229,11 @@ def run_playground(
                 max_tokens=768,
                 provider_api_key=provider_secret,
             )
+            
+            # Restore the original data before saving output
+            unmasked_output = restore_sensitive_data(completion["output"], security_report.token_map)
+            completion["output"] = unmasked_output
+            
         except RuntimeError as exc:
             raise provider_error_to_http(exc) from exc
 

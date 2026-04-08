@@ -28,6 +28,7 @@ from app.engine_core import (
     load_platform_setup,
     observability_trace,
     orchestration_run,
+    restore_sensitive_data,
     runtime_execute,
     security_process_text,
     simulate_provider_completion,
@@ -252,6 +253,11 @@ def _run_workflow_logic(
             max_tokens=768,
             provider_api_key=provider_secret,
         )
+        
+        # Restore the original data before returning
+        unmasked_output = restore_sensitive_data(llm_dispatch["output"], security.get("token_map", {}))
+        llm_dispatch["output"] = unmasked_output
+        
     except RuntimeError as exc:
         raise provider_error_to_http(exc) from exc
 
@@ -556,6 +562,11 @@ def dispatch_llm_completion(
             max_tokens=payload.max_tokens,
             provider_api_key=provider_secret,
         )
+        
+        # Restore the original data before returning
+        unmasked_output = restore_sensitive_data(completion["output"], sec_result.get("token_map", {}))
+        completion["output"] = unmasked_output
+
     except RuntimeError as exc:
         raise provider_error_to_http(exc) from exc
 

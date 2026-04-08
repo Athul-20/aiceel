@@ -3815,3 +3815,77 @@ select {
   gap: var(--sp-4);
   width: 280px;
 }
+
+/* --- Hardware Cage: Radial Gauge --- */
+.hw-gauge-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--sp-6) 0;
+  position: relative;
+  margin-top: -1rem;
+}
+
+.hw-gauge {
+  width: 140px;
+  height: 140px;
+  position: relative;
+}
+
+.hw-gauge svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.hw-gauge-bg {
+  fill: none;
+  stroke: var(--grey-100);
+  stroke-width: 10;
+}
+
+.hw-gauge-fill {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease;
+}
+
+.hw-gauge-fill.safe { stroke: var(--green); }
+.hw-gauge-fill.warn { stroke: var(--orange); }
+.hw-gauge-fill.danger { stroke: var(--red); }
+
+.hw-gauge-info {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.hw-gauge-val {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.hw-gauge-label {
+  font-size: 0.625rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+
+@keyframes hw-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.02); opacity: 0.85; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.hw-gauge.danger {
+  animation: hw-pulse 2s infinite ease-in-out;
+}
+

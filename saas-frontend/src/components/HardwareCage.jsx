@@ -127,6 +127,25 @@ export default function HardwareCage() {
              <ResultBadge type="neutral">Risk Score: {(lastRisk || 0).toFixed(2)}</ResultBadge>
           </div>
 
+          <div className="hw-gauge-container">
+            <div className={`hw-gauge ${isJailed ? 'danger' : ''}`}>
+              <svg viewBox="0 0 100 100">
+                <circle className="hw-gauge-bg" cx="50" cy="50" r="44" />
+                <circle 
+                  className={`hw-gauge-fill ${isJailed ? 'danger' : isThrottled ? 'warn' : 'safe'}`}
+                  cx="50" cy="50" r="44"
+                  strokeDasharray="276.46"
+                  strokeDashoffset={276.46 - (276.46 * (1 - (stats?.current_affinity_count || 8) / (stats?.logical_cores || 8)))}
+                />
+              </svg>
+              <div className="hw-gauge-info">
+                <span className="hw-gauge-val">{Math.round((1 - (stats?.current_affinity_count || 8) / (stats?.logical_cores || 8)) * 100)}%</span>
+                <span className="hw-gauge-label">Intensity</span>
+              </div>
+            </div>
+            <p className="muted" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>Mitigation Gating Intensity</p>
+          </div>
+
           <div style={{ 
             display: "grid", 
             gridTemplateColumns: "repeat(4, 1fr)", 
@@ -145,7 +164,6 @@ export default function HardwareCage() {
                   background: isActive 
                     ? (isJailed ? "var(--red)" : isThrottled ? "var(--orange)" : "var(--green)") 
                     : "#1a1a1a",
-                  boxShadow: isActive ? `0 0 15px ${isJailed ? "var(--red)" : isThrottled ? "var(--orange)" : "var(--green-soft)"}` : "none",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
