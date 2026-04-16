@@ -23,14 +23,6 @@ export const NAV_GROUPS = [
     ],
   },
   {
-    title: "Hardened Security",
-    items: [
-      ["hardware_cage", "hardware", "Hardware Cage"],
-      ["canary_monitor", "canary", "CABTP Monitor"],
-    ],
-  },
-
-  {
     title: "Agents",
     items: [
       ["agents", "agent", "Agent Builder"],
@@ -44,6 +36,7 @@ export const NAV_GROUPS = [
       ["keys", "key", "API Keys"],
       ["providers", "provider", "Providers"],
       ["usage", "usage", "Usage"],
+      ["audit", "shield", "Audit Logs"],
       ["webhooks", "webhook", "Webhooks"],
       ["workspaces", "workspace", "Workspaces"],
       ["api_docs", "docs", "API Docs"],

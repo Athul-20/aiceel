@@ -127,11 +127,10 @@ function AppContent() {
       case "keys":
       case "providers":
       case "usage":
+      case "audit":
       case "webhooks":
       case "workspaces":
         return <Settings />;
-      case "hardware_cage": return <HardwareCage />;
-      case "canary_monitor": return <CanaryMonitor />;
       default: return <Dashboard />;
     }
   }

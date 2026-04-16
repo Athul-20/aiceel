@@ -506,7 +506,8 @@ export default function Settings() {
     webhooks, webhookDeliveries, webhookUrl, setWebhookUrl, webhookSecret, setWebhookSecret,
     webhookEvents, toggleWebhookEvent, createWebhook, removeWebhook, // Webhooks
     workspaces, activeWorkspace, workspaceName, setWorkspaceName, workspaceMembers,
-    memberEmail, setMemberEmail, memberRole, setMemberRole, createWorkspace, switchWorkspace, addWorkspaceMember // Workspaces
+    memberEmail, setMemberEmail, memberRole, setMemberRole, createWorkspace, switchWorkspace, addWorkspaceMember, // Workspaces
+    auditLogs // Audit
   } = useApp();
   const revokeTextMatches = useMemo(() => revokeConfirmationText.trim() === "REVOKE", [revokeConfirmationText]);
   const selectedUsageApiKey = useMemo(
@@ -631,6 +632,7 @@ export default function Settings() {
   if (activeView === "usage") { title = "Usage & Quotas"; desc = "Monitor requests, tokens, and billing capacity."; icon = <Icons.IconUsage />; }
   if (activeView === "webhooks") { title = "Webhooks"; desc = "Configure endpoint callbacks for system events."; icon = <Icons.IconWebhook />; }
   if (activeView === "workspaces") { title = "Workspaces"; desc = "Manage team resources and RBAC roles."; icon = <Icons.IconWorkspace />; }
+  if (activeView === "audit") { title = "Audit Logs"; desc = "Real-time Flight Data Recorder. Inspect all application changes and agent swarm events."; icon = <Icons.IconUsage />; }
 
   return (
     <>
@@ -980,6 +982,53 @@ export default function Settings() {
           </section>
         </div>
       )}
+
+      {activeView === "audit" && (
+        <section className="card" style={{ maxWidth: "1200px" }}>
+          <div className="card-head">
+            <h3>Audit Trace</h3>
+            <p>Live stream of structural system mutations and agent decisions. Events are immutable.</p>
+          </div>
+          <div className="sublist stagger-children">
+            {auditLogs?.map((log) => (
+              <article className="sublist-item" key={log.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <h4 style={{ margin: 0, textTransform: "uppercase", fontSize: "0.85rem", color: "var(--indigo)" }}>
+                      {log.action}
+                    </h4>
+                    <span className="muted" style={{ fontSize: "0.75rem" }}>{log.target_type || "System"}</span>
+                  </div>
+                  <span className="muted" style={{ fontSize: "0.75rem" }}>
+                    {new Date(log.created_at).toLocaleString()}
+                  </span>
+                </div>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "0.8rem", padding: "0.75rem", background: "var(--surface)", borderRadius: "var(--radius)" }}>
+                    <div>
+                        <strong className="muted" style={{ display: "block", marginBottom: "0.2rem" }}>Request ID</strong>
+                        <span style={{ fontFamily: "monospace", color: "var(--ink)" }}>{log.request_id || "System Trigger"}</span>
+                    </div>
+                    <div>
+                        <strong className="muted" style={{ display: "block", marginBottom: "0.2rem" }}>IP Address</strong>
+                        <span style={{ fontFamily: "monospace", color: "var(--ink)" }}>{log.ip_address || "Internal Core"}</span>
+                    </div>
+                </div>
+
+                {Object.keys(log.metadata || {}).length > 0 && (
+                  <div style={{ padding: "0.75rem", background: "var(--black)", color: "#e2e8f0", borderRadius: "var(--radius)", overflowX: "auto" }}>
+                     <pre style={{ margin: 0, fontSize: "0.8rem", fontFamily: "monospace" }}>{JSON.stringify(log.metadata, null, 2)}</pre>
+                  </div>
+                )}
+              </article>
+            ))}
+            {(!auditLogs || auditLogs.length === 0) && (
+              <p className="muted" style={{ padding: "2rem", textAlign: "center" }}>No audit events found for this workspace.</p>
+            )}
+          </div>
+        </section>
+      )}
+
     </div>
 
       {newRawKey && (

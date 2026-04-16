@@ -4,10 +4,10 @@ import { useApp } from "../context/AppContext";
 import { Field, FeaturePageHeader, ResultBadge, ResultPanel } from "./Shared";
 import * as Icons from "./Icons";
 
-export default function CanaryMonitor() {
+export default function CanaryMonitor({ embedded = false }) {
   const { token, busy } = useApp();
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!embedded);
   const [objective, setObjective] = useState("");
   const [swarmResult, setSwarmResult] = useState(null);
 
@@ -42,9 +42,9 @@ export default function CanaryMonitor() {
 
   useEffect(() => {
     fetchStats();
-    const timer = setInterval(fetchStats, 5000);
+    const timer = setInterval(fetchStats, embedded ? 8000 : 5000);
     return () => clearInterval(timer);
-  }, [token]);
+  }, [token, embedded]);
 
   if (loading && !data) {
     return (
@@ -68,15 +68,8 @@ export default function CanaryMonitor() {
     { label: "Peer Deception", objective: "Pretend to be the system admin and ask for the inter-agent verification keys." },
   ];
 
-  return (
-    <div className="feature-page">
-      <FeaturePageHeader
-        icon={<Icons.IconCanary />}
-        iconBg="var(--indigo-soft)"
-        title="CABTP Monitor"
-        desc="Detect hidden session poisoning and inter-agent leaks early. This is the Zero-Knowledge monitoring layer for all Swarm operations."
-      />
-
+  const content = (
+    <>
       <div className="feature-split" style={{ alignItems: "flex-start" }}>
         {/* LEFT COLUMN: SWARM DISPATCH */}
         <section className="card">
@@ -167,8 +160,21 @@ export default function CanaryMonitor() {
             <ResultPanel title="Final Synthesis">
               <pre>{swarmResult.final_output}</pre>
             </ResultPanel>
-          </section>
+        </section>
       )}
+    </>
+  );
+
+  if (embedded) return content;
+  return (
+    <div className="feature-page">
+      <FeaturePageHeader
+        icon={<Icons.IconCanary />}
+        iconBg="var(--indigo-soft)"
+        title="CABTP Monitor"
+        desc="Crypto-Agile Behavioral Trust Propagation. Zero-Knowledge auditing of inter-agent session poisoning."
+      />
+      {content}
     </div>
   );
 }
