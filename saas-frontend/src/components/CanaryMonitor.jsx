@@ -5,16 +5,16 @@ import { Field, FeaturePageHeader, ResultBadge, ResultPanel } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function CanaryMonitor() {
-  const { activeApiKey, busy } = useApp();
+  const { token, busy } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [objective, setObjective] = useState("");
   const [swarmResult, setSwarmResult] = useState(null);
 
   const fetchStats = async () => {
-    if (!activeApiKey) return;
+    if (!token) return;
     try {
-      const res = await api.getSecurityCenterStatus(activeApiKey);
+      const res = await api.getSecurityCenterStatus({ token });
       setData(res);
     } catch (err) {
       console.error(err);
@@ -27,7 +27,7 @@ export default function CanaryMonitor() {
     const obj = customObjective || objective;
     if (!obj) return;
     try {
-      const res = await api.runSwarm(activeApiKey, { objective: obj });
+      const res = await api.runSwarm({ token }, { objective: obj, lead_agent_id: null, collaborator_agent_ids: [] });
       if (res) {
           setSwarmResult(res);
           fetchStats(); // Update events
@@ -44,7 +44,7 @@ export default function CanaryMonitor() {
     fetchStats();
     const timer = setInterval(fetchStats, 5000);
     return () => clearInterval(timer);
-  }, [activeApiKey]);
+  }, [token]);
 
   if (loading && !data) {
     return (

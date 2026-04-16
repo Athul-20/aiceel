@@ -14,6 +14,8 @@ const ICON_MAP = {
   agent: Icons.IconAgent,
   swarm: Icons.IconSwarm,
   playground: Icons.IconPlayground,
+  hardware: Icons.IconHardware,
+  canary: Icons.IconCanary,
 };
 
 export default function Dashboard() {

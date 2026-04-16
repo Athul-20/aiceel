@@ -5,16 +5,16 @@ import { Field, FeaturePageHeader, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
 export default function HardwareCage() {
-  const { activeApiKey, busy } = useApp();
+  const { token, busy } = useApp();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [lastRisk, setLastRisk] = useState(0);
 
   const fetchStats = async () => {
-    if (!activeApiKey) return;
+    if (!token) return;
     try {
-      const res = await api.getHardwareStats(activeApiKey);
+      const res = await api.getHardwareStats({ token });
       setStats(res);
     } catch (err) {
       console.error(err);
@@ -27,9 +27,9 @@ export default function HardwareCage() {
     const p = customPrompt || prompt;
     if (!p) return;
     try {
-      const res = await api.runSecurityProbe(activeApiKey, { text: p });
+      const res = await api.runSecurityProbe({ token }, { text: p });
       if (res) {
-          setLastRisk(res.risk_score || 0);
+          setLastRisk(res.masking?.risk_score || 0); // Need to use masking.risk_score based on probe response shape
           fetchStats();
       }
     } catch (err) {
@@ -41,7 +41,7 @@ export default function HardwareCage() {
     fetchStats();
     const timer = setInterval(fetchStats, 3000);
     return () => clearInterval(timer);
-  }, [activeApiKey]);
+  }, [token]);
 
   if (loading && !stats) {
     return (

@@ -100,6 +100,22 @@ def _preview(value: str) -> str:
         return value[:1] + "***"
     return f"{value[:3]}***{value[-2:]}"
 
+def restore_sensitive_data(text: str, token_map: Dict[str, str]) -> str:
+    """
+    Restores original sensitive values from semantic pseudonyms.
+    Sorts by token length descending to prevent partial replacement collisions.
+    """
+    if not text or not token_map:
+        return text
+        
+    unmasked_text = text
+    for token, original_value in sorted(token_map.items(), key=lambda x: len(x[0]), reverse=True):
+        if not isinstance(original_value, str):
+            original_value = str(original_value)
+        unmasked_text = unmasked_text.replace(token, original_value)
+        
+    return unmasked_text
+
 
 def _token_kind(kind: str) -> str:
     normalized = (kind or "").strip().lower()

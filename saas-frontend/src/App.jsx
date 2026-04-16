@@ -17,6 +17,8 @@ import Playground from "./components/Playground";
 import ApiDocs from "./components/ApiDocs";
 import Settings from "./components/Settings";
 import BiomedMasking from "./components/BiomedMasking";
+import HardwareCage from "./components/HardwareCage";
+import CanaryMonitor from "./components/CanaryMonitor";
 import * as Icons from "./components/Icons";
 
 const MAX_NOTIFICATIONS = 5;
@@ -128,6 +130,8 @@ function AppContent() {
       case "webhooks":
       case "workspaces":
         return <Settings />;
+      case "hardware_cage": return <HardwareCage />;
+      case "canary_monitor": return <CanaryMonitor />;
       default: return <Dashboard />;
     }
   }

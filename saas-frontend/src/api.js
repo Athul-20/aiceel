@@ -163,6 +163,23 @@ export const api = {
       ...authOptions(auth),
     }),
 
+  getHardwareStats: (auth) =>
+    request("/v1/security/center/hardware/stats", {
+      ...authOptions(auth),
+    }),
+
+  runSecurityProbe: (auth, payload) =>
+    request("/v1/security/center/probe", {
+      method: "POST",
+      ...authOptions(auth),
+      body: payload,
+    }),
+
+  getSecurityCenterStatus: (auth) =>
+    request("/v1/security/center/status", {
+      ...authOptions(auth),
+    }),
+
   getPlatformSetup: (auth) =>
     request("/v1/platform/setup", {
       ...authOptions(auth),
