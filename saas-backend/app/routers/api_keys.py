@@ -46,7 +46,10 @@ def list_api_keys(
     context = get_auth_context(request)
     workspace_id = context.workspace.id if context and context.workspace else current_user.default_workspace_id
 
-    query = db.query(ApiKey).filter(ApiKey.user_id == current_user.id)
+    query = db.query(ApiKey).filter(
+        ApiKey.user_id == current_user.id,
+        ApiKey.is_active.is_(True),
+    )
     if workspace_id:
         query = query.filter(ApiKey.workspace_id == workspace_id)
 

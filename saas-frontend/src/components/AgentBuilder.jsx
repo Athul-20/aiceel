@@ -12,7 +12,7 @@ export default function AgentBuilder() {
     agentRunResult, selectedRunAgent, createAgent, deleteAgent, runAgentFromStudio,
     singleAgentTestAgentId, setSingleAgentTestAgentId, singleAgentTestService, setSingleAgentTestService,
     singleAgentTestPrompt, setSingleAgentTestPrompt, singleAgentTestResult, runSingleAgentTest,
-    services, busy, setActiveView, setPlaygroundAgentId, hasActiveKey
+    services, busy, setActiveView, setPlaygroundAgentId, hasFeatureAccess, sessionStatus
   } = useApp();
 
   const selectedSingleAgent = agents.find((item) => String(item.id) === String(singleAgentTestAgentId)) || null;
@@ -42,12 +42,6 @@ export default function AgentBuilder() {
     "Explain this API error and suggest the next 2 debug steps.",
   ];
 
-  const CREATION_SCENARIOS = [
-    { name: "Legal Analyst", role: "Specialist", prompt: "Review legal documents for PII, compliance risks, and core obligations." },
-    { name: "DevOps SRE", role: "Engineer", prompt: "Debug cloud infrastructure logs and suggest terraform fixes." },
-    { name: "Support Tier-3", role: "Assistance", prompt: "Handle complex customer escalations with empathy and deep product knowledge." },
-  ];
-
   return (
     <div className="feature-page">
       <FeaturePageHeader
@@ -57,10 +51,9 @@ export default function AgentBuilder() {
         desc="Create reusable AI agents, test one agent instantly, and run full workflow orchestration."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>Activate an API key to run agents.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -89,16 +82,7 @@ export default function AgentBuilder() {
             <Field label="System Prompt">
               <textarea rows={4} value={agentPrompt} onChange={(e) => setAgentPrompt(e.target.value)} required />
             </Field>
-
-            <div className="agent-prompt-chips" style={{ marginBottom: "1rem" }}>
-              {CREATION_SCENARIOS.map((s) => (
-                <button key={s.name} type="button" className="btn-ghost btn-sm" onClick={() => { setAgentName(s.name); setAgentRole(s.role); setAgentPrompt(s.prompt); }}>
-                  {s.name}
-                </button>
-              ))}
-            </div>
-
-            <button className="btn-primary" disabled={busy || !hasActiveKey} type="submit">
+            <button className="btn-primary" disabled={busy || !hasFeatureAccess} type="submit">
               {busy ? "Saving..." : "Create Agent"}
             </button>
           </form>
@@ -133,7 +117,7 @@ export default function AgentBuilder() {
                 </button>
               ))}
             </div>
-            <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasActiveKey} type="submit">
+            <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasFeatureAccess} type="submit">
               {busy ? "Testing..." : "Run Single Agent Test"}
             </button>
           </form>
@@ -191,7 +175,7 @@ export default function AgentBuilder() {
           <Field label="User Prompt">
             <textarea rows={4} value={agentRunPrompt} onChange={(e) => setAgentRunPrompt(e.target.value)} required />
           </Field>
-          <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasActiveKey} type="submit">
+          <button className="btn-primary btn-full" disabled={busy || agents.length === 0 || !hasFeatureAccess} type="submit">
             {busy ? "Running..." : "Run Workflow"}
           </button>
         </form>

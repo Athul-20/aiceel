@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 import json
 import logging
+from collections import Counter
 
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ def record_meter_event(
     runtime_ms: int = 0,
     status: str = "ok",
     request_id: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
     event = MeterEvent(
         workspace_id=workspace_id,
@@ -38,6 +40,7 @@ def record_meter_event(
         runtime_ms=max(0, runtime_ms),
         status=status,
         request_id=request_id,
+        metadata_json=json.dumps(metadata or {}, ensure_ascii=True),
     )
     try:
         db.add(event)
@@ -128,3 +131,30 @@ def parse_event_metadata(value: str) -> dict:
         return {}
     except Exception:
         return {}
+
+
+def extract_entity_counts(metadata: dict | None) -> dict[str, int]:
+    if not isinstance(metadata, dict):
+        return {}
+    raw_counts = metadata.get("entity_counts", {})
+    if not isinstance(raw_counts, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for key, value in raw_counts.items():
+        label = str(key or "").strip().lower()
+        if not label:
+            continue
+        try:
+            amount = int(value)
+        except Exception:
+            continue
+        if amount > 0:
+            counts[label] = amount
+    return counts
+
+
+def aggregate_entity_counts(metadatas: list[dict]) -> dict[str, int]:
+    totals: Counter[str] = Counter()
+    for metadata in metadatas:
+        totals.update(extract_entity_counts(metadata))
+    return dict(sorted(totals.items(), key=lambda item: (-item[1], item[0])))

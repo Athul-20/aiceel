@@ -17,11 +17,11 @@ import Playground from "./components/Playground";
 import ApiDocs from "./components/ApiDocs";
 import Settings from "./components/Settings";
 import BiomedMasking from "./components/BiomedMasking";
-import HardwareCage from "./components/HardwareCage";
-import CanaryMonitor from "./components/CanaryMonitor";
+import * as Icons from "./components/Icons";
 
 const MAX_NOTIFICATIONS = 5;
 const NOTIFICATION_TTL_MS = 4500;
+const SIDEBAR_COLLAPSED_KEY = "aiccel_sidebar_collapsed";
 
 function NotificationTray({ notice, error }) {
   const [items, setItems] = useState([]);
@@ -89,7 +89,20 @@ function NotificationTray({ notice, error }) {
 }
 
 function AppContent() {
-  const { isLoggedIn, activeView, activeViewMeta, error, notice, activeWorkspace } = useApp();
+  const { isLoggedIn, activeView, activeViewMeta, error, notice, activeWorkspace, theme, toggleTheme } = useApp();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+    } catch {}
+  }, [sidebarCollapsed]);
 
   if (!isLoggedIn) {
     return <AuthScreen />;
@@ -105,8 +118,6 @@ function AppContent() {
       case "vault": return <PandoraVault />;
       case "pandora": return <PandoraLab />;
       case "sandbox": return <SandboxLab />;
-      case "hardware_cage": return <HardwareCage />;
-      case "canary_monitor": return <CanaryMonitor />;
       case "agents": return <AgentBuilder />;
       case "swarm": return <SwarmLab />;
       case "playground": return <Playground />;
@@ -122,8 +133,8 @@ function AppContent() {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar />
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((current) => !current)} />
       <main className="main-area">
         <header className="top-bar">
           <div className="top-bar-left">
@@ -133,6 +144,18 @@ function AppContent() {
           <div className="top-bar-right">
             <span className="status-pill">{activeWorkspace ? activeWorkspace.name : "Personal Sandbox"}</span>
             <span className="status-pill live">Engine Ready</span>
+            <button
+              className="btn-ghost btn-sm theme-toggle"
+              onClick={toggleTheme}
+              type="button"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              aria-pressed={theme === "dark"}
+            >
+              <span className="theme-toggle-icon" aria-hidden="true">
+                {theme === "dark" ? <Icons.IconSun /> : <Icons.IconMoon />}
+              </span>
+              <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            </button>
           </div>
         </header>
 

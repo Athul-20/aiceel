@@ -1,13 +1,9 @@
-import { useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { Field } from "./Shared";
+import * as Icons from "./Icons";
 
 export default function AuthScreen() {
-  const { mode, setMode, email, setEmail, password, setPassword, busy, error, setError, notice, authSubmit } = useApp();
-
-  useEffect(() => {
-    setError("");
-  }, [mode, setError]);
+  const { mode, setMode, email, setEmail, password, setPassword, busy, authError, authNotice, authSubmit, theme, toggleTheme } = useApp();
 
   return (
     <div className="auth-shell">
@@ -41,12 +37,28 @@ export default function AuthScreen() {
 
         <section className="auth-card">
           <div className="auth-card-head">
-            <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
-            <p>{mode === "login" ? "Sign in to access your AICCEL workspace." : "Start building with AICCEL features."}</p>
+            <div className="auth-card-head-row">
+              <div>
+                <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
+                <p>{mode === "login" ? "Sign in to access your AICCEL workspace." : "Start building with AICCEL features."}</p>
+              </div>
+              <button
+                className="btn-ghost btn-sm auth-theme-toggle"
+                onClick={toggleTheme}
+                type="button"
+                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                aria-pressed={theme === "dark"}
+              >
+                <span className="theme-toggle-icon" aria-hidden="true">
+                  {theme === "dark" ? <Icons.IconSun /> : <Icons.IconMoon />}
+                </span>
+                <span>{theme === "dark" ? "Light" : "Dark"}</span>
+              </button>
+            </div>
           </div>
 
-          {error ? <div className="banner error">{error}</div> : null}
-          {notice ? <div className="banner ok">{notice}</div> : null}
+          {authError ? <div className="banner error">{authError}</div> : null}
+          {authNotice ? <div className="banner ok">{authNotice}</div> : null}
 
           <div className="auth-switch">
             <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">Sign in</button>

@@ -106,6 +106,9 @@ def ensure_sqlite_compat_schema() -> None:
         "provider_credentials": [
             "workspace_id INTEGER",
         ],
+        "meter_events": [
+            "metadata_json TEXT NOT NULL DEFAULT '{}'",
+        ],
     }
 
     with _engine.begin() as conn:

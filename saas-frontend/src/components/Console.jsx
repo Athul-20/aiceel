@@ -8,7 +8,7 @@ import * as Icons from "./Icons";
 export default function Console() {
   const {
     engineOperation, setEngineOperation, enginePayload, setEnginePayload,
-    engineResult, engineRequestMeta, runFeatureApi, busy, hasActiveKey, setActiveView, copyText
+    engineResult, engineRequestMeta, runFeatureApi, busy, hasFeatureAccess, copyText, sessionStatus
   } = useApp();
 
   const [scenarioQuery, setScenarioQuery] = useState("");
@@ -193,10 +193,9 @@ print(response.json())`;
         desc="Make real API calls inside the platform, inspect live responses, and copy production-ready integration code."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>Activate an API key to use the Console.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>Get API Key</button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -262,7 +261,7 @@ print(response.json())`;
             <div className="console-op-meta">
               <span className={`badge badge-method method-${endpointMethod.toLowerCase()}`}>{endpointMethod}</span>
               <span className="badge">{endpointPath}</span>
-              <span className="badge">Auth: X-API-Key</span>
+              <span className="badge">Auth: Session in UI / API key externally</span>
             </div>
 
             <form className="form-grid" onSubmit={handleSubmit}>
@@ -296,7 +295,7 @@ print(response.json())`;
                 <button className="btn-ghost" onClick={formatPayload} type="button">Format JSON</button>
                 <button className="btn-ghost" onClick={resetPayload} type="button">Reset Payload</button>
                 <button className="btn-ghost" onClick={() => copyText(prettyPayload)} type="button">Copy Payload</button>
-                <button className="btn-primary" disabled={busy || !hasActiveKey || Boolean(payloadError)} type="submit">
+                <button className="btn-primary" disabled={busy || !hasFeatureAccess || Boolean(payloadError)} type="submit">
                   {busy ? "Calling API..." : `Send ${endpointMethod}`}
                 </button>
               </div>

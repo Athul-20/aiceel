@@ -123,6 +123,36 @@ def get_current_user(
     return user
 
 
+def _resolve_user_from_bearer_token(
+    request: Request,
+    db: Session,
+    token: str | None,
+    x_workspace_id: int | None,
+) -> User | None:
+    if not token:
+        return None
+
+    subject = decode_access_token(token)
+    if not subject:
+        raise _unauthorized()
+
+    try:
+        user_id = int(subject)
+    except ValueError as exc:
+        raise _unauthorized() from exc
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise _unauthorized()
+
+    workspace, role = _resolve_workspace_for_user(request, db, user, x_workspace_id)
+    _set_auth_context(
+        request,
+        AuthContext(user=user, auth_mode="bearer", workspace=workspace, role=role, scopes={"*"}),
+    )
+    return user
+
+
 def _find_user_by_api_key(db: Session, x_api_key: str) -> tuple[User, ApiKey, Workspace] | None:
     key_hash = hash_api_key(x_api_key)
     key_record = (
@@ -173,8 +203,14 @@ def _enforce_role_minimum(role: str, minimum_role: str) -> None:
 def get_user_from_api_key(
     request: Request,
     db: Session = Depends(get_db),
+    token: str | None = Depends(oauth2_scheme_optional),
+    x_workspace_id: int | None = Header(default=None, alias="X-Workspace-ID"),
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> tuple[User, str]:
+    bearer_user = _resolve_user_from_bearer_token(request, db, token, x_workspace_id)
+    if bearer_user is not None:
+        return bearer_user, "bearer"
+
     if not x_api_key:
         raise _unauthorized()
 

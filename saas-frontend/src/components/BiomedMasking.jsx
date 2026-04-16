@@ -55,7 +55,7 @@ function groupPdfEntities(entities) {
 }
 
 export default function BiomedMasking() {
-  const { runBiomedMasking, runBiomedPdfMasking, busy, hasActiveKey, setActiveView } = useApp();
+  const { runBiomedMasking, runBiomedPdfMasking, busy, hasFeatureAccess, sessionStatus } = useApp();
 
   // Mode
   const [activeTab, setActiveTab] = useState("text");
@@ -175,12 +175,9 @@ export default function BiomedMasking() {
         desc="Specialized zero-shot entity recognition for healthcare and life sciences. Powered by GLiNER-BioMed."
       />
 
-      {!hasActiveKey && (
+      {!hasFeatureAccess && (
         <div className="key-alert">
-          <span>Activate an API key to use BioMedical Masking.</span>
-          <button className="btn-ghost btn-sm" onClick={() => setActiveView("keys")}>
-            Get API Key
-          </button>
+          <span>{sessionStatus.alertMessage}</span>
         </div>
       )}
 
@@ -278,7 +275,7 @@ export default function BiomedMasking() {
 
               <button
                 className={`btn-primary btn-full${busy ? " btn-loading" : ""}`}
-                disabled={busy || !hasActiveKey}
+                disabled={busy || !hasFeatureAccess}
                 type="submit"
               >
                 {busy ? "Analyzing BioMed Data..." : "Mask Medical Entities"}
@@ -397,7 +394,7 @@ export default function BiomedMasking() {
               <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
                 <button
                   className={`btn-primary${busy ? " btn-loading" : ""}`}
-                  disabled={busy || !hasActiveKey || !file}
+                  disabled={busy || !hasFeatureAccess || !file}
                   type="submit"
                 >
                   {busy ? "Redacting..." : "Redact Medical PDF"}

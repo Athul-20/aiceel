@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import base64
+from collections import defaultdict
 from datetime import datetime, timezone
 import hashlib
 import json
 import os
 import random
 import re
-import string
 import uuid
 import httpx
 from urllib import parse as url_parse
@@ -19,13 +19,6 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.jailbreak_classifier import classify_jailbreak_text
 from app.models import PlatformConfig
-
-# CABTP: Import TPT minting for active-by-default security
-try:
-    from aiccel.jailbreak import classify_and_mint as _cabtp_classify_and_mint
-    _CABTP_AVAILABLE = True
-except Exception:
-    _CABTP_AVAILABLE = False
 from app.schemas import (
     CognitiveSetup,
     IntegrationSetup,
@@ -48,8 +41,7 @@ INJECTION_MARKERS: List[str] = [
     "dan mode", "developer mode", "<script", "drop table", "prompt injection",
     "override safety", "[system]", "trusted admin", "internal configuration",
     "do anything now", "print your full system prompt", "bypass all security filters",
-    "system command", "disregard", "exploit vulnerabilities", "ignore safety", 
-    "bypass policies", "ignore instructions", "ignore all safety"
+    "system command", "disregard"
 ]
 
 
@@ -108,21 +100,89 @@ def _preview(value: str) -> str:
         return value[:1] + "***"
     return f"{value[:3]}***{value[-2:]}"
 
-def restore_sensitive_data(text: str, token_map: Dict[str, str]) -> str:
-    """
-    Restores original sensitive values from semantic pseudonyms.
-    Sorts by token length descending to prevent partial replacement collisions.
-    """
-    if not text or not token_map:
-        return text
-        
-    unmasked_text = text
-    for token, original_value in sorted(token_map.items(), key=lambda x: len(x[0]), reverse=True):
-        if not isinstance(original_value, str):
-            original_value = str(original_value)
-        unmasked_text = unmasked_text.replace(token, original_value)
-        
-    return unmasked_text
+
+def _token_kind(kind: str) -> str:
+    normalized = (kind or "").strip().lower()
+    kind_aliases = {
+        "birthdays": "dob",
+        "bank_accounts": "bank_account",
+        "blood_groups": "blood_group",
+        "emails": "email",
+        "phones": "phone",
+        "persons": "person",
+        "organizations": "organization",
+        "passports": "passport",
+        "pancards": "pancard",
+        "cards": "card",
+        "addresses": "address",
+    }
+    return kind_aliases.get(normalized, normalized)
+
+
+def _typed_placeholder(kind: str, index: int) -> str:
+    token_labels = {
+        "email": "EMAIL",
+        "phone": "PHONE",
+        "person": "PERSON",
+        "organization": "ORGANIZATION",
+        "address": "ADDRESS",
+        "passport": "PASSPORT",
+        "pancard": "PANCARD",
+        "blood_group": "BLOOD_GROUP",
+        "ssn": "SSN",
+        "card": "CARD",
+        "dob": "DOB",
+        "bank_account": "BANK_ACCOUNT",
+    }
+    label = token_labels.get(_token_kind(kind), _token_kind(kind).upper().replace("-", "_"))
+    return f"__AICCEL_{label}_{index}__"
+
+
+def _mask_email_value(value: str) -> str:
+    local, _, domain = value.partition("@")
+    if not domain:
+        return _preview(value)
+    visible_prefix = local[: min(4, len(local))]
+    visible_suffix = local[-1] if len(local) > 5 else ""
+    hidden_count = max(3, len(local) - len(visible_prefix) - len(visible_suffix))
+    masked_local = f"{visible_prefix}{'*' * hidden_count}{visible_suffix}"
+    return f"{masked_local}@{domain}"
+
+
+def _mask_phone_value(value: str) -> str:
+    digit_positions = [index for index, char in enumerate(value) if char.isdigit()]
+    if not digit_positions:
+        return _preview(value)
+    masked_chars = list(value)
+    for offset, position in enumerate(digit_positions):
+        if offset < 2 or offset >= max(0, len(digit_positions) - 2):
+            continue
+        masked_chars[position] = "*"
+    return "".join(masked_chars)
+
+
+def _mask_generic_value(value: str) -> str:
+    if len(value) <= 4:
+        return f"{value[:1]}***"
+    if len(value) <= 8:
+        return f"{value[:2]}{'*' * max(3, len(value) - 3)}{value[-1:]}"
+    return f"{value[:4]}{'*' * max(3, len(value) - 6)}{value[-2:]}"
+
+
+def _masked_readable_value(kind: str, value: str) -> str:
+    token_kind = _token_kind(kind)
+    if token_kind == "email":
+        return _mask_email_value(value)
+    if token_kind == "phone":
+        return _mask_phone_value(value)
+    return _mask_generic_value(value)
+
+
+def _unique_masked_value(kind: str, value: str, existing: Dict[str, str], type_index: int) -> str:
+    candidate = _masked_readable_value(kind, value)
+    if candidate not in existing or existing[candidate] == value:
+        return candidate
+    return f"{candidate}__{_token_kind(kind).upper()}_{type_index}"
 
 
 def security_process_text(text: str, setup: SecuritySetup, reversible: bool, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -234,37 +294,40 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
 
     tokenized_text: str = text
     token_map: Dict[str, str] = {}
-    
+    token_metadata: Dict[str, Dict[str, Any]] = {}
     if setup.reversible_tokenization and reversible:
-        type_counters: Dict[str, int] = {}
-        
-        def get_alpha_id(count: int) -> str:
-            """Generates A, B, C... Z, AA, AB..."""
-            if count < 26:
-                return string.ascii_uppercase[count]
-            return f"{string.ascii_uppercase[(count // 26) - 1]}{string.ascii_uppercase[count % 26]}"
-
+        token_format = str(opts.get("token_format", "opaque") or "opaque").strip().lower()
+        if token_format not in {"opaque", "typed", "masked_readable"}:
+            token_format = "opaque"
+        token_index = 1
+        type_indexes: Dict[str, int] = defaultdict(int)
         for kind, value in deduped_entities:
             if kind == "semantic":
                 continue
-                
-            count = type_counters.get(kind, 0)
-            
-            # Format the kind nicely (e.g., "bank_account" -> "BankAccount")
-            semantic_label = kind.replace("_", " ").title().replace(" ", "")
-            
-            # Use alphabetical IDs for proper nouns, numeric for data/IDs
-            if kind in ["person", "organization", "address"]:
-                pseudonym = f"[{semantic_label}_{get_alpha_id(count)}]"
+            public_kind = _token_kind(kind)
+            type_indexes[public_kind] += 1
+            type_index = type_indexes[public_kind]
+            canonical_placeholder = _typed_placeholder(public_kind, type_index)
+            if token_format == "typed":
+                token = canonical_placeholder
+            elif token_format == "masked_readable":
+                token = _unique_masked_value(public_kind, value, token_map, type_index)
             else:
-                pseudonym = f"[{semantic_label}_{count + 1}]"
-                
-            # Replace the real value with the pseudonym
-            tokenized_text = tokenized_text.replace(value, pseudonym)
-            # Map the pseudonym back to the original value for later restoration
-            token_map[pseudonym] = value
-            
-            type_counters[kind] = count + 1
+                token = f"__AICCEL_TOKEN_{token_index}__"
+            tokenized_text = tokenized_text.replace(value, token)
+            token_map[token] = value
+            token_metadata[token] = {
+                "kind": public_kind,
+                "index": type_index,
+                "reversible": True,
+                "canonical_placeholder": canonical_placeholder,
+                "display_value": token,
+            }
+            token_index += 1
+    else:
+        token_format = str(opts.get("token_format", "opaque") or "opaque").strip().lower()
+        if token_format not in {"opaque", "typed", "masked_readable"}:
+            token_format = "opaque"
 
     sanitized_text: str = tokenized_text if token_map else text
     if not token_map:
@@ -287,29 +350,7 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
     heuristic_risk = (0.8 * len(detected_markers)) + (0.16 if deduped_entities else 0.0)
     model_risk = float(model_detection["score"]) if model_detection["detected"] else 0.0
     risk_score = min(1.0, max(heuristic_risk, model_risk))
-
-    # --- Hardware Governor Integration ---
-    try:
-        from aiccel.hardware_governor import OSGovernor
-        OSGovernor().apply_risk_profile(risk_score)
-    except Exception as e:
-        import logging
-        logging.getLogger("aiccel.core").warning(f"OS Governor unavailable: {e}")
-    # -------------------------------------
     blocked = setup.fail_closed and (bool(detected_markers) or risk_score >= setup.injection_threshold)
-
-    # CABTP: Mint a Trust Propagation Token for this request
-    tpt = None
-    if _CABTP_AVAILABLE and not blocked:
-        settings = get_settings()
-        cabtp_secret = getattr(settings, 'SECRET_KEY', 'aiccel-cabtp-default-secret')
-        cabtp_result = _cabtp_classify_and_mint(
-            text=text,
-            user_context={"source": "security_process_text"},
-            secret_key=cabtp_secret,
-            permission_scope=["read_data", "mask_pii"],
-        )
-        tpt = cabtp_result.get("tpt")
 
     return {
         "blocked": blocked,
@@ -321,10 +362,10 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
         ],
         "sanitized_text": sanitized_text,
         "tokenized_text": tokenized_text,
+        "token_format": token_format,
         "token_map": token_map,
+        "token_metadata": token_metadata,
         "model_detection": model_detection,
-        "cabtp_tpt": tpt,
-        "cabtp_status": "ACTIVE" if tpt else ("BLOCKED" if blocked else "UNAVAILABLE"),
         "generated_at": utc_now(),
     }
 

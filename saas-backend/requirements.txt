@@ -2,14 +2,15 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 python-jose[cryptography]
-passlib
+passlib[bcrypt]
 pydantic-settings
-email-validator
+pydantic[email]
 alembic
 psycopg[binary]
 redis
 rq
 httpx
+cryptography
 transformers
 pytest
 requests
@@ -20,5 +21,5 @@ tenacity
 pandas
 numpy
 PyPDF2
-PyMuPDF
+pymupdf
 python-multipart

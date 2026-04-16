@@ -11,51 +11,66 @@ async function request(path, { method = "GET", token, apiKey, workspaceId, idemp
   if (workspaceId) headers["X-Workspace-ID"] = String(workspaceId);
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 30000); // 30s timeout
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
+  });
 
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method,
-      headers,
-      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
-      signal: controller.signal,
-    });
-    clearTimeout(id);
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      const requestError = new Error(error?.error?.message || error.detail || "Request failed");
-      requestError.status = response.status;
-      requestError.payload = error;
-      throw requestError;
-    }
-
-    const isBlob = response.headers.get("content-type")?.includes("application/pdf");
-    const data = response.status === 204 ? null : (isBlob ? await response.blob() : await response.json());
-    
-    if (isBlob) {
-      let entities = [];
-      try { entities = JSON.parse(response.headers.get("X-Entity-Summary") || "[]"); } catch {}
-      return {
-        blob: data,
-        redactedCount: parseInt(response.headers.get("X-Redacted-Count") || "0", 10),
-        entities,
-      };
-    }
-
-    if (returnMeta) {
-      return { data, status: response.status };
-    }
-    return data;
-
-  } catch (err) {
-    clearTimeout(id);
-    if (err.name === "AbortError") {
-      throw new Error("Request timed out. The engine or provider is taking too long to respond.");
-    }
-    throw err;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    const requestError = new Error(error?.error?.message || error.detail || "Request failed");
+    requestError.status = response.status;
+    requestError.payload = error;
+    throw requestError;
   }
+
+  const isBlob = response.headers.get("content-type")?.includes("application/pdf");
+  const data = response.status === 204 ? null : (isBlob ? await response.blob() : await response.json());
+  
+  if (isBlob) {
+    let entities = [];
+    try { entities = JSON.parse(response.headers.get("X-Entity-Summary") || "[]"); } catch {}
+    return {
+      blob: data,
+      redactedCount: parseInt(response.headers.get("X-Redacted-Count") || "0", 10),
+      entities,
+    };
+  }
+
+  if (returnMeta) {
+    return { data, status: response.status };
+  }
+  return data;
+}
+
+function authOptions(auth, workspaceIdOverride) {
+  if (!auth) {
+    return workspaceIdOverride ? { workspaceId: workspaceIdOverride } : {};
+  }
+
+  if (typeof auth === "string") {
+    return {
+      apiKey: auth,
+      ...(workspaceIdOverride ? { workspaceId: workspaceIdOverride } : {}),
+    };
+  }
+
+  return {
+    ...(auth.token ? { token: auth.token } : {}),
+    ...(auth.apiKey ? { apiKey: auth.apiKey } : {}),
+    ...(workspaceIdOverride ?? auth.workspaceId) ? { workspaceId: workspaceIdOverride ?? auth.workspaceId } : {},
+  };
+}
+
+function withQuery(path, params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    query.set(key, String(value));
+  });
+  const queryString = query.toString();
+  return queryString ? `${path}?${queryString}` : path;
 }
 
 export const api = {
@@ -100,258 +115,248 @@ export const api = {
       workspaceId,
     }),
 
-  listProviderKeys: (apiKey) =>
+  listProviderKeys: (auth) =>
     request("/v1/providers", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  upsertProviderKey: (apiKey, provider, payload) =>
+  upsertProviderKey: (auth, provider, payload) =>
     request(`/v1/providers/${provider}`, {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  removeProviderKey: (apiKey, provider) =>
+  removeProviderKey: (auth, provider) =>
     request(`/v1/providers/${provider}`, {
       method: "DELETE",
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  listAgents: (apiKey) =>
+  listAgents: (auth) =>
     request("/v1/agents", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  createAgent: (apiKey, payload) =>
+  createAgent: (auth, payload) =>
     request("/v1/agents", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  deleteAgent: (apiKey, agentId) =>
+  deleteAgent: (auth, agentId) =>
     request(`/v1/agents/${agentId}`, {
       method: "DELETE",
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  runSwarm: (apiKey, payload) =>
+  runSwarm: (auth, payload) =>
     request("/v1/swarm/run", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  getSecurityFeatures: (apiKey) =>
+  getSecurityFeatures: (auth) =>
     request("/v1/security/features", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  getSecurityCenterStatus: (apiKey) =>
-    request("/v1/security/center/status", {
-      apiKey,
-    }),
-
-  getHardwareStats: (apiKey) =>
-    request("/v1/security/center/hardware/stats", {
-      apiKey,
-    }),
-
-  runSecurityProbe: (apiKey, payload) =>
-    request("/v1/security/center/probe", {
-      method: "POST",
-      apiKey,
-      body: payload,
-    }),
-
-  getPlatformSetup: (apiKey) =>
+  getPlatformSetup: (auth) =>
     request("/v1/platform/setup", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  getPlatformFeatures: (apiKey) =>
+  getPlatformFeatures: (auth) =>
     request("/v1/platform/features", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  updateRuntimeSetup: (apiKey, payload) =>
+  updateRuntimeSetup: (auth, payload) =>
     request("/v1/platform/runtime", {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  updateCognitiveSetup: (apiKey, payload) =>
+  updateCognitiveSetup: (auth, payload) =>
     request("/v1/platform/cognitive", {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  updateSecuritySetup: (apiKey, payload) =>
+  updateSecuritySetup: (auth, payload) =>
     request("/v1/platform/security", {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  updateOrchestrationSetup: (apiKey, payload) =>
+  updateOrchestrationSetup: (auth, payload) =>
     request("/v1/platform/orchestration", {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  updateObservabilitySetup: (apiKey, payload) =>
+  updateObservabilitySetup: (auth, payload) =>
     request("/v1/platform/observability", {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  updateIntegrationsSetup: (apiKey, payload) =>
+  updateIntegrationsSetup: (auth, payload) =>
     request("/v1/platform/integrations", {
       method: "PUT",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runIntegrationLab: (apiKey, payload) =>
+  runIntegrationLab: (auth, payload) =>
     request("/v1/lab/execute", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  getEngineManifest: (apiKey) =>
+  getEngineManifest: (auth) =>
     request("/v1/engine/integrations/manifest", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  runEngineRuntime: (apiKey, payload) =>
+  runEngineRuntime: (auth, payload) =>
     request("/v1/engine/runtime/execute", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runEngineCognitive: (apiKey, payload) =>
+  runEngineCognitive: (auth, payload) =>
     request("/v1/engine/cognitive/plan", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runPdfMasking: (apiKey, file, options) => {
+  runPdfMasking: (auth, file, options) => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("options", JSON.stringify(options));
     
     return request("/v1/engine/security/pdf/mask", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: formData,
     });
   },
 
-  runEngineSecurity: (apiKey, payload) =>
-    request("/v1/engine/security/process", {
+  runPiiMasking: (auth, payload) =>
+    request("/v1/pii/mask", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runVaultEncrypt: (apiKey, payload) =>
+  runSentinelAnalyze: (auth, payload) =>
+    request("/v1/sentinel/analyze", {
+      method: "POST",
+      ...authOptions(auth),
+      body: payload,
+    }),
+
+  runVaultEncrypt: (auth, payload) =>
     request("/v1/engine/security/vault/encrypt", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runVaultDecrypt: (apiKey, payload) =>
+  runVaultDecrypt: (auth, payload) =>
     request("/v1/engine/security/vault/decrypt", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runEngineOrchestration: (apiKey, payload) =>
+  runEngineOrchestration: (auth, payload) =>
     request("/v1/engine/orchestration/run", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runEngineTrace: (apiKey, payload) =>
+  runEngineTrace: (auth, payload) =>
     request("/v1/engine/observability/trace", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runAgentWorkflow: (apiKey, payload) =>
+  runAgentWorkflow: (auth, payload) =>
     request("/v1/engine/workflows/agent-run", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runLLMDispatch: (apiKey, payload) =>
+  runLLMDispatch: (auth, payload) =>
     request("/v1/engine/llm/complete", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runPlayground: ({ apiKey, serviceSlug, prompt, agentId }) =>
+  runPlayground: (auth, { serviceSlug, prompt, agentId }) =>
     request("/v1/playground/run", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: { service_slug: serviceSlug, prompt, agent_id: agentId ?? null },
     }),
 
-  getUsageSummary: (apiKey) =>
-    request("/v1/usage/summary", {
-      apiKey,
+  getUsageSummary: (auth, options = {}) =>
+    request(withQuery("/v1/usage/summary", options), {
+      ...authOptions(auth),
     }),
 
-  listUsageEvents: (apiKey) =>
-    request("/v1/usage/events?limit=100", {
-      apiKey,
+  listUsageEvents: (auth, options = {}) =>
+    request(withQuery("/v1/usage/events", { limit: 100, ...options }), {
+      ...authOptions(auth),
     }),
 
-  getQuotaStatus: (apiKey) =>
+  getQuotaStatus: (auth) =>
     request("/v1/quotas/status", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  listAuditLogs: (apiKey) =>
+  listAuditLogs: (auth) =>
     request("/v1/audit/logs?limit=100", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  listWebhooks: (apiKey) =>
+  listWebhooks: (auth) =>
     request("/v1/webhooks?limit=100", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  createWebhook: (apiKey, payload) =>
+  createWebhook: (auth, payload) =>
     request("/v1/webhooks", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  deleteWebhook: (apiKey, webhookId) =>
+  deleteWebhook: (auth, webhookId) =>
     request(`/v1/webhooks/${webhookId}`, {
       method: "DELETE",
-      apiKey,
+      ...authOptions(auth),
     }),
 
-  listWebhookDeliveries: (apiKey) =>
+  listWebhookDeliveries: (auth) =>
     request("/v1/webhooks/deliveries?limit=100", {
-      apiKey,
+      ...authOptions(auth),
     }),
 
   listWorkspaces: (token) =>
@@ -385,21 +390,21 @@ export const api = {
       body: payload,
     }),
 
-  runConsoleRequest: (apiKey, { method, path, payload }) =>
+  runConsoleRequest: (auth, { method, path, payload }) =>
     request(path, {
       method: String(method || "GET").toUpperCase(),
-      apiKey,
+      ...authOptions(auth),
       body: String(method || "GET").toUpperCase() === "GET" ? undefined : payload,
       returnMeta: true,
     }),
-  runBiomedMasking: (apiKey, payload) =>
+  runBiomedMasking: (auth, payload) =>
     request("/v1/biomed/mask", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: payload,
     }),
 
-  runBiomedPdfMasking: (apiKey, file, threshold = 0.5, labels = null) => {
+  runBiomedPdfMasking: (auth, file, threshold = 0.5, labels = null) => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("threshold", String(threshold));
@@ -409,8 +414,14 @@ export const api = {
 
     return request("/v1/biomed/pdf/mask", {
       method: "POST",
-      apiKey,
+      ...authOptions(auth),
       body: formData,
     });
   },
+  runPandoraTransform: (auth, payload) =>
+    request("/v1/engine/pandora/transform", {
+      method: "POST",
+      ...authOptions(auth),
+      body: payload,
+    }),
 };
