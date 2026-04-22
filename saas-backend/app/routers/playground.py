@@ -4,6 +4,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.errors import provider_error_to_http
+from app.audit import log_audit
 import logging
 
 _pg_logger = logging.getLogger("aiccel.cabtp.playground")
@@ -123,7 +124,31 @@ def run_playground(
         token_map=security_result["token_map"],
     )
     if security_report.blocked:
-        raise HTTPException(status_code=400, detail="Prompt blocked by security policy")
+        markers_str = ", ".join(security_report.detected_markers) or "risk threshold exceeded"
+        block_metadata = {
+            "detected_markers": security_report.detected_markers,
+            "risk_score": security_report.risk_score,
+            "model_detection": {
+                k: v for k, v in (security_result.get("model_detection") or {}).items()
+                if k in ("detected", "label", "score", "risk_band")
+            },
+            "prompt_preview": payload.prompt[:200],
+            "service_slug": payload.service_slug,
+            "agent_name": agent_name,
+        }
+        log_audit(
+            db,
+            action="PLAYGROUND_INJECTION_BLOCKED",
+            workspace_id=workspace_id,
+            user_id=user.id,
+            target_type="playground",
+            request=request,
+            metadata=block_metadata,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Prompt blocked by security policy. Detected: {markers_str}",
+        )
 
     config_snapshot = {
         "runtime.lazy_proxy_imports": str(runtime_setup.lazy_proxy_imports),

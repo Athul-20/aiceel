@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         "file://", 
         "null"
     ]
-    trusted_hosts: list[str] = ["localhost", "127.0.0.1", "localhost:8001", "127.0.0.1:8001", "testserver"]
+    trusted_hosts: list[str] = ["localhost", "127.0.0.1", "localhost:8000", "127.0.0.1:8000", "localhost:8001", "127.0.0.1:8001", "testserver"]
 
     # Ops defaults
     default_plan_tier: str = "free"

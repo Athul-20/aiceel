@@ -4,7 +4,6 @@ import logging
 import re
 import threading
 import unicodedata
-import uuid
 from typing import Any, Dict, List, Set, cast
 
 logger = logging.getLogger("aiccel.privacy")
@@ -267,6 +266,7 @@ class EntityMasker:
 
         mask_mapping: Dict[str, str] = {}
         entity_to_mask: Dict[str, str] = {}
+        entity_type_counts: Dict[str, int] = {}
         extracted_entities: Dict[str, List[str]] = {
             key: []
             for key in sorted(
@@ -330,10 +330,8 @@ class EntityMasker:
 
                     lowered_entity = entity_text.lower()
                     if lowered_entity not in entity_to_mask:
-                        label_parts: List[str] = label.split()
-                        last_part = str(label_parts[-1]) if label_parts else "ENT"
-                        prefix = last_part.upper()[:4]
-                        mask_id = f"{prefix}_{uuid.uuid4().hex[:8]}"
+                        entity_type_counts[internal_key] = entity_type_counts.get(internal_key, 0) + 1
+                        mask_id = f"{internal_key}_{entity_type_counts[internal_key]}"
                         self._add_extracted_entity(extracted_entities, internal_key, entity_text)
                         entity_to_mask[lowered_entity] = mask_id
                         mask_mapping[mask_id] = entity_text
@@ -356,7 +354,7 @@ class EntityMasker:
             "phones": {"pattern": PHONE_PATTERN, "prefix": "PHONE", "enabled": remove_phone},
             "blood_groups": {"pattern": BLOOD_GROUP_PATTERN, "prefix": "BLOOD", "enabled": remove_blood_group},
             "ids": {
-                "pattern": re.compile(r"(?i)(?:id|ssn|account|passport|pan)[:\s]+([A-Z0-9]{4,20}\b)"),
+                "pattern": re.compile(r"(?i)\b(?:id|ssn|account|passport|pan)[:\s]+([A-Z0-9]{4,20}\b)"),
                 "prefix": "ID",
                 "enabled": True,
             },
@@ -385,7 +383,8 @@ class EntityMasker:
 
                 mask_id = entity_to_mask.get(lowered_match)
                 if mask_id is None:
-                    mask_id = f"{str(meta['prefix'])}_{uuid.uuid4().hex[:8]}"
+                    entity_type_counts[pattern_key] = entity_type_counts.get(pattern_key, 0) + 1
+                    mask_id = f"{pattern_key}_{entity_type_counts[pattern_key]}"
                     entity_to_mask[lowered_match] = mask_id
                     mask_mapping[mask_id] = clean_match
 

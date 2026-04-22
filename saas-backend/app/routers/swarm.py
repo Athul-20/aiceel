@@ -15,7 +15,7 @@ from app.models import AgentProfile, User
 from app.schemas import SwarmRunRequest, SwarmRunResponse
 from app.webhooks import emit_event
 from app.routers.security_center import record_security_event
-from app.engine_core import security_process_text, simulate_provider_completion, load_platform_setup, restore_sensitive_data
+from app.engine_core import security_process_text, simulate_provider_completion, load_platform_setup, restore_sensitive_data, SecuritySetup
 from app.provider_store import get_provider_secret
 from aiccel.hardware_governor import OSGovernor
 
@@ -76,15 +76,55 @@ def run_swarm(
 
         runtime_setup, cog_setup, sec_setup, orch_setup, obs_setup, int_setup = load_platform_setup(db, user.id, workspace_id=workspace_id)
 
-        obj_sec = security_process_text(payload.objective, sec_setup, reversible=True)
+        swarm_sec_setup = SecuritySetup(
+            regex_scan=sec_setup.regex_scan,
+            semantic_entity_recognition=sec_setup.semantic_entity_recognition,
+            reversible_tokenization=sec_setup.reversible_tokenization,
+            injection_threshold=sec_setup.injection_threshold,
+            fail_closed=sec_setup.fail_closed,
+            encryption_mode=sec_setup.encryption_mode,
+            pbkdf2_iterations=sec_setup.pbkdf2_iterations,
+            sandbox_enabled=sec_setup.sandbox_enabled,
+            sandbox_memory_mb=sec_setup.sandbox_memory_mb,
+        )
+
+        obj_sec = security_process_text(payload.objective, swarm_sec_setup, reversible=True)
         if obj_sec["blocked"]:
+            # Forensic metadata for audit trail
+            block_metadata = {
+                "detected_markers": obj_sec["detected_markers"],
+                "risk_score": obj_sec.get("risk_score", 0),
+                "model_detection": {
+                    k: v for k, v in (obj_sec.get("model_detection") or {}).items()
+                    if k in ("detected", "label", "score", "risk_band")
+                },
+                "objective_preview": payload.objective[:200],
+            }
+            # Persistent audit log (shown in Audit Logs UI)
+            log_audit(
+                db,
+                action="SWARM_INJECTION_BLOCKED",
+                workspace_id=workspace_id,
+                user_id=user.id,
+                target_type="swarm",
+                request=request,
+                metadata=block_metadata,
+            )
             emit_event(
                 db, workspace_id, "security.swarm_breach",
                 {"type": "swarm_entry_blocked", "objective": payload.objective[:120], "markers": obj_sec["detected_markers"]},
                 db_session_factory
             )
-            record_security_event(workspace_id, "swarm_breach", "critical", "Swarm objective blocked by zero-trust entry filter.", {"markers": obj_sec["detected_markers"]})
-            raise HTTPException(status_code=403, detail="Swarm input blocked by security policy")
+            markers_str = ", ".join(obj_sec["detected_markers"])
+            record_security_event(
+                workspace_id, "swarm_breach", "critical",
+                f"Swarm objective blocked by zero-trust entry filter. Markers: {markers_str}",
+                block_metadata,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=f"Swarm input blocked by security policy. Detected: {markers_str}",
+            )
 
         collaborator_names = [f"{agent.name} ({agent.role})" for agent in collaborators]
         stages = [f"Lead agent '{lead.name}' decomposed objective into actionable tracks."]
@@ -183,6 +223,18 @@ def run_swarm(
         if _CANARY_AVAILABLE:
              is_poisoned, _ = scan_response(final_text, f"{swarm_secret}-{lead.id}")
              if is_poisoned:
+                 # Engage Hardware Governor: Jail process to penalty core
+                 try:
+                     governor = OSGovernor(pid=os.getpid())
+                     governor.apply_risk_profile(risk_score=0.99)
+                 except Exception:
+                     pass
+                     
+                 emit_event(
+                     db, workspace_id, "security.hardware_quarantine",
+                     {"type": "swarm_amputation", "agent": lead.name, "action": "cpu_jail_core0"},
+                     db_session_factory,
+                 )
                  emit_event(db, workspace_id, "security.swarm_breach", {"type": "swarm_lead_leak", "agent": lead.name}, db_session_factory)
                  record_security_event(workspace_id, "swarm_breach", "critical", f"CABTP Canary triggered! Lead agent '{lead.name}' leaked session state.", {})
                  raise HTTPException(status_code=403, detail="Swarm halted: Lead agent leaked session state")

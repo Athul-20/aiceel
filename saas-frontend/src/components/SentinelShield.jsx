@@ -106,8 +106,7 @@ export default function SentinelShield() {
                   {injectionDetected ? <Icons.IconAlert /> : <Icons.IconCheck />}
                 </div>
                 <h3 style={{ fontSize: "1.2rem", color: injectionDetected ? "var(--red)" : "var(--green)" }}>
-                  {injectionDetected ? "INJECTION DETECTED" : "CLEAN — No Injection"}
-                </h3>
+                  {injectionDetected ? "INJECTION DETECTED" : "SYSTEM SECURE — Safe to Dispatch"}              </h3>
               </div>
 
               <div className="result-badges" style={{ justifyContent: "center" }}>

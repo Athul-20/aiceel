@@ -11,7 +11,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = BASE_DIR / "saas-backend"
 FRONTEND_DIR = BASE_DIR / "saas-frontend"
-BACKEND_PORT = 8001
+BACKEND_PORT = 8000
 FRONTEND_PORT = 5174
 
 

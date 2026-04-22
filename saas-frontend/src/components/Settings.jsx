@@ -3,6 +3,9 @@ import { useApp } from "../context/AppContext";
 import { Field, FeaturePageHeader, ResultBadge } from "./Shared";
 import * as Icons from "./Icons";
 
+
+
+
 const USAGE_CHART_BASE_COLORS = ["#2563eb", "#f59e0b", "#16a34a", "#ef4444", "#8b5cf6", "#06b6d4", "#84cc16", "#f97316", "#ec4899", "#14b8a6"];
 const USAGE_TIMEZONES = {
   IST: { label: "IST", timeZone: "Asia/Kolkata", offsetMinutes: 330 },
@@ -485,6 +488,7 @@ function UsageLineChart({ title, subtitle, data }) {
 }
 
 export default function Settings() {
+  const [auditFilter, setAuditFilter] = useState("all");
   const currentMonth = new Date().getMonth() + 1;
   const currentYear = new Date().getFullYear();
   const [pendingRevokeKey, setPendingRevokeKey] = useState(null);
@@ -989,14 +993,48 @@ export default function Settings() {
             <h3>Audit Trace</h3>
             <p>Live stream of structural system mutations and agent decisions. Events are immutable.</p>
           </div>
-          <div className="sublist stagger-children">
-            {auditLogs?.map((log) => (
+           <div className="sublist stagger-children">
+            <div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1rem" }}>
+  <button 
+    onClick={() => setAuditFilter("all")}
+    style={{ background: "none", border: "none", cursor: "pointer", color: auditFilter === "all" ? "var(--indigo)" : "var(--ink-light)", fontWeight: auditFilter === "all" ? "bold" : "normal", borderBottom: auditFilter === "all" ? "2px solid var(--indigo)" : "none", padding: "0.5rem" }}
+  >
+    All Activity
+  </button>
+  <button 
+    onClick={() => setAuditFilter("critical")}
+    style={{ background: "none", border: "none", cursor: "pointer", color: auditFilter === "critical" ? "var(--red)" : "var(--ink-light)", fontWeight: auditFilter === "critical" ? "bold" : "normal", borderBottom: auditFilter === "critical" ? "2px solid var(--red)" : "none", padding: "0.5rem" }}
+  >
+    Critical Breaches
+  </button>
+</div>
+
+                    {auditLogs?.filter(log => !log.action.toLowerCase().includes("auth"))
+            .filter(log => auditFilter === "all" || log.action.includes("BLOCKED"))
+            .map((log) => (
+
+
               <article className="sublist-item" key={log.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <h4 style={{ margin: 0, textTransform: "uppercase", fontSize: "0.85rem", color: "var(--indigo)" }}>
-                      {log.action}
-                    </h4>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <span style={{ 
+                        fontSize: "0.7rem", 
+                        padding: "0.2rem 0.6rem", 
+                        borderRadius: "10px", 
+                        background: log.action.includes("BLOCKED") ? "var(--red-light)" : "var(--grey-100)", 
+                        color: log.action.includes("BLOCKED") ? "var(--red)" : "var(--grey-900)",
+                        fontWeight: "bold",
+                        border: "1px solid"
+                      }}>
+                        {log.action.includes("BLOCKED") ? "CRITICAL" : "EVENT"}
+                      </span>
+                      <h4 style={{ margin: 0, textTransform: "uppercase", fontSize: "0.85rem", color: "var(--indigo)" }}>
+                        {log.action.replace(/_/g, " ")}
+                      </h4>
+                    </div>
+
+
                     <span className="muted" style={{ fontSize: "0.75rem" }}>{log.target_type || "System"}</span>
                   </div>
                   <span className="muted" style={{ fontSize: "0.75rem" }}>
@@ -1016,8 +1054,9 @@ export default function Settings() {
                 </div>
 
                 {Object.keys(log.metadata || {}).length > 0 && (
-                  <div style={{ padding: "0.75rem", background: "var(--black)", color: "#e2e8f0", borderRadius: "var(--radius)", overflowX: "auto" }}>
-                     <pre style={{ margin: 0, fontSize: "0.8rem", fontFamily: "monospace" }}>{JSON.stringify(log.metadata, null, 2)}</pre>
+                  <div style={{ padding: "0.75rem", background: "var(--grey-100)", border: "1px solid var(--border)", color: "var(--grey-900)", borderRadius: "var(--radius)", overflowX: "auto" }}>
+
+                     <pre style={{ margin: 0, fontSize: "0.8rem", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>{JSON.stringify(log.metadata, null, 2)}</pre>
                   </div>
                 )}
               </article>

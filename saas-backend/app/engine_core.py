@@ -137,21 +137,21 @@ def _token_kind(kind: str) -> str:
 
 def _typed_placeholder(kind: str, index: int) -> str:
     token_labels = {
-        "email": "EMAIL",
-        "phone": "PHONE",
-        "person": "PERSON",
-        "organization": "ORGANIZATION",
-        "address": "ADDRESS",
-        "passport": "PASSPORT",
-        "pancard": "PANCARD",
-        "blood_group": "BLOOD_GROUP",
-        "ssn": "SSN",
-        "card": "CARD",
-        "dob": "DOB",
-        "bank_account": "BANK_ACCOUNT",
+        "email": "email",
+        "phone": "phone",
+        "person": "person",
+        "organization": "organization",
+        "address": "address",
+        "passport": "passport",
+        "pancard": "pancard",
+        "blood_group": "blood_group",
+        "ssn": "ssn",
+        "card": "card",
+        "dob": "dob",
+        "bank_account": "bank_account",
     }
-    label = token_labels.get(_token_kind(kind), _token_kind(kind).upper().replace("-", "_"))
-    return f"__AICCEL_{label}_{index}__"
+    label = token_labels.get(_token_kind(kind), _token_kind(kind).lower().replace("-", "_"))
+    return f"{label}_{index}"
 
 
 def _mask_email_value(value: str) -> str:
@@ -311,26 +311,35 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
     tokenized_text: str = text
     token_map: Dict[str, str] = {}
     token_metadata: Dict[str, Dict[str, Any]] = {}
+    
     if setup.reversible_tokenization and reversible:
         token_format = str(opts.get("token_format", "opaque") or "opaque").strip().lower()
         if token_format not in {"opaque", "typed", "masked_readable"}:
             token_format = "opaque"
-        token_index = 1
+            
+        tokenized_text = mask_result.get("masked_text", text) if (setup.regex_scan or setup.semantic_entity_recognition) else text
         type_indexes: Dict[str, int] = defaultdict(int)
-        for kind, value in deduped_entities:
-            if kind == "semantic":
-                continue
-            public_kind = _token_kind(kind)
+        raw_mapping = mask_result.get("mask_mapping", {}) if (setup.regex_scan or setup.semantic_entity_recognition) else {}
+        
+        # We perform exact internal mask_id replacements from the already masked string
+        for internal_mask_id, value in raw_mapping.items():
+            internal_kind = internal_mask_id.rsplit('_', 1)[0]
+            public_kind = type_to_kind.get(internal_kind) or (internal_kind[:-1] if internal_kind.endswith('s') else internal_kind)
+            public_kind = _token_kind(public_kind)
+            
             type_indexes[public_kind] += 1
             type_index = type_indexes[public_kind]
             canonical_placeholder = _typed_placeholder(public_kind, type_index)
+            
             if token_format == "typed":
                 token = canonical_placeholder
             elif token_format == "masked_readable":
                 token = _unique_masked_value(public_kind, value, token_map, type_index)
             else:
-                token = f"__AICCEL_TOKEN_{token_index}__"
-            tokenized_text = tokenized_text.replace(value, token)
+                token = canonical_placeholder
+                
+            # Replace internal placeholder (e.g. "emails_1") with public format (e.g. "email_1")
+            tokenized_text = tokenized_text.replace(internal_mask_id, token)
             token_map[token] = value
             token_metadata[token] = {
                 "kind": public_kind,
@@ -339,7 +348,6 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
                 "canonical_placeholder": canonical_placeholder,
                 "display_value": token,
             }
-            token_index += 1
     else:
         token_format = str(opts.get("token_format", "opaque") or "opaque").strip().lower()
         if token_format not in {"opaque", "typed", "masked_readable"}:
@@ -351,6 +359,8 @@ def security_process_text(text: str, setup: SecuritySetup, reversible: bool, opt
             if kind == "semantic":
                 continue
             sanitized_text = sanitized_text.replace(value, f"[{kind}-redacted]")
+        # Ensure tokenized_text also reflects the redacted output for non-reversible mode
+        tokenized_text = sanitized_text
 
     detected_markers = [marker for marker in INJECTION_MARKERS if marker in lowered]
     model_detection = classify_jailbreak_text(text)
